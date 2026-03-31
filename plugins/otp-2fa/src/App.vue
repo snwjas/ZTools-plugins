@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { getOTP, base32tohex } from './utils/otp'
 import { useAuth } from './composables/useAuth'
 import { useAccounts } from './composables/useAccounts'
 import { useTicker } from './composables/useTicker'
-import { useDataManagement } from './composables/useDataManagement'
 
 // Components
 import AccountCard from './components/AccountCard.vue'
@@ -13,10 +12,7 @@ import SetPasswordModal from './components/Modals/SetPasswordModal.vue'
 import SettingsModal from './components/Modals/SettingsModal.vue'
 import EditModal from './components/Modals/EditModal.vue'
 import ConfirmModal from './components/Modals/ConfirmModal.vue'
-import ImportDataModal from './components/Modals/ImportDataModal.vue'
-import ChangePasswordModal from './components/Modals/ChangePasswordModal.vue'
-import { STORAGE_KEY, CONFIG_KEY, DEFAULT_PINYIN_SCHEME } from './constants'
-import { matchesPinyinCached, buildPinyinCache, type PinyinScheme, type PinyinCache } from './utils/pinyin'
+import { STORAGE_KEY, CONFIG_KEY } from './constants'
 
 // --- Composables Initialization ---
 const {
@@ -26,7 +22,7 @@ const {
   passwordErrorMsg, verifyErrorMsg,
   verifyInput, pendingAction,
   tryAutoUnlock, setMasterPassword, verifyMasterPassword,
-  clearAuthData, changeMasterPassword, getHardwareKey
+  clearAuthData
 } = useAuth()
 
 const {
@@ -39,55 +35,13 @@ const {
   getAccountTimeLeft, performTokenUpdate
 } = useTicker()
 
-const {
-  showImportModal, importDataInput, importPasswordInput, importDataError, importPasswordError,
-  exportData, importData, verifyAndApplyImportData, cancelImport
-} = useDataManagement()
-
 // --- Local UI State ---
-const config = ref({ timerStyle: 'bar', nextPreview: true, pinyinScheme: DEFAULT_PINYIN_SCHEME })
-const searchQuery = ref('')
-
-// 拼音缓存：账户列表变化时重新计算，搜索时直接复用
-const pinyinCacheMap = ref<Map<string, PinyinCache>>(new Map())
-watch(
-  () => accounts.value.map(a => a.id + '|' + a.name),
-  () => {
-    const newMap = new Map<string, PinyinCache>()
-    for (const acc of accounts.value) {
-      newMap.set(acc.id, buildPinyinCache(acc.name))
-    }
-    pinyinCacheMap.value = newMap
-  },
-  { immediate: true }
-)
-
-// filteredAccounts 携带真实索引，避免模板中 indexOf 的 O(N²) 开销
-const filteredAccounts = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  const scheme = (config.value.pinyinScheme || DEFAULT_PINYIN_SCHEME) as PinyinScheme
-  return accounts.value
-    .map((acc, index) => ({ acc, index }))
-    .filter(({ acc }) => {
-      if (!q) return true
-      const cache = pinyinCacheMap.value.get(acc.id)
-      if (!cache) return acc.name.toLowerCase().includes(q)
-      return matchesPinyinCached(acc.name, q, scheme, cache)
-    })
-})
-
-const setupSubInput = () => {
-  const z = (window as any).ztools
-  z?.setSubInput?.((data: { text: string }) => {
-    searchQuery.value = data.text || ''
-  }, '搜索账号...', false)
-}
+const config = ref({ timerStyle: 'bar', nextPreview: false })
 const showModal = ref(false)
 const showNextSelectMenu = ref(false)
 const showAbout = ref(false)
 const showSettings = ref(false)
 const showSelectMenu = ref(false)
-const showPinyinSelectMenu = ref(false)
 
 const modalTitle = ref('')
 const modalForm = ref({
@@ -100,7 +54,6 @@ const activeModalDropdown = ref<string | null>(null)
 const nameError = ref(false)
 const secretError = ref(false)
 const secretErrorMsg = ref('密钥不合法')
-const nameWarn = ref(false)
 
 const menuVisible = ref(false)
 const menuPos = ref({ x: 0, y: 0 })
@@ -116,18 +69,6 @@ const showResetConfirmModal = ref(false)
 const countdown = ref(0)
 const countdownTimer = ref<any>(null)
 
-const showExportConfirmModal = ref(false)
-const exportCountdown = ref(0)
-const exportCountdownTimer = ref<any>(null)
-
-const showChangePasswordModal = ref(false)
-const changePwdCurrentError = ref('')
-const changePwdNewError = ref('')
-const changePwdConfirmError = ref('')
-let changePwdCurrent = ''
-let changePwdNew = ''
-let changePwdConfirm = ''
-
 const dragIndex = ref<number | null>(null)
 const isDragging = ref(false)
 const deleteCountdown = ref(0)
@@ -142,8 +83,6 @@ const initialize = async () => {
     document.documentElement.removeAttribute('data-theme')
   }
 
-  z?.setExpendHeight?.(552)
-
   await loadAccounts(masterSalt, masterKey, config, {
     onAutoUnlock: tryAutoUnlock,
     onDecryptAll: () => decryptAllAccounts(masterKey.value),
@@ -157,18 +96,9 @@ const initialize = async () => {
   })
   startTicker(accounts)
   window.addEventListener('click', hideContextMenu)
-  setupSubInput()
-
-  let killTimer: any = null
 
   if (z?.onPluginEnter) {
     z.onPluginEnter(async () => {
-      // 中途打开，取消待执行的 kill
-      if (killTimer) { clearTimeout(killTimer); killTimer = null }
-
-      searchQuery.value = ''
-      z?.setSubInputValue?.('')
-
       await loadAccounts(masterSalt, masterKey, config, {
         onAutoUnlock: tryAutoUnlock,
         onDecryptAll: () => decryptAllAccounts(masterKey.value),
@@ -177,101 +107,11 @@ const initialize = async () => {
       })
     })
   }
-
-  if (z?.onPluginOut) {
-    z.onPluginOut(() => {
-      // 退出后 3 分钟内未打开则结束进程释放内存
-      killTimer = setTimeout(() => { z.outPlugin(true) }, 3 * 60 * 1000)
-    })
-  }
 }
 
 const handleResetDatabase = () => {
   showResetConfirmModal.value = true
   startCountdown()
-}
-
-const handleExportData = async () => {
-  if (!masterSalt.value) {
-    passwordInput.value = ''
-    verifyErrorMsg.value = ''
-    showVerifyPasswordModal.value = true
-    pendingAction.value = handleExportData
-    return
-  }
-  
-  if (!masterKey.value) {
-    await tryAutoUnlock()
-    if (!masterKey.value) {
-      pendingAction.value = handleExportData
-      showVerifyPasswordModal.value = true
-      return
-    }
-  }
-
-  // 弹出确认框，开始倒计时
-  showExportConfirmModal.value = true
-  exportCountdown.value = 3
-  if (exportCountdownTimer.value) clearInterval(exportCountdownTimer.value)
-  exportCountdownTimer.value = setInterval(() => {
-    if (exportCountdown.value > 0) exportCountdown.value--
-    else { clearInterval(exportCountdownTimer.value); exportCountdownTimer.value = null }
-  }, 1000)
-}
-
-const confirmExport = async () => {
-  showExportConfirmModal.value = false
-  await exportData(accounts.value, masterSalt.value, masterKey.value)
-}
-
-const handleImportData = async () => {
-  importData()
-}
-
-const handleChangePassword = () => {
-  if (!masterSalt.value) {
-    const z = (window as any).ztools
-    z?.showNotification?.('尚未设置主密码')
-    return
-  }
-  changePwdCurrentError.value = ''
-  changePwdNewError.value = ''
-  changePwdConfirmError.value = ''
-  showChangePasswordModal.value = true
-}
-
-const handleChangePasswordSubmit = async () => {
-  const result = await changeMasterPassword(
-    changePwdCurrent,
-    changePwdNew,
-    changePwdConfirm,
-    accounts.value,
-    (msg) => { changePwdCurrentError.value = msg },
-    (msg) => { changePwdNewError.value = msg },
-    (msg) => { changePwdConfirmError.value = msg }
-  )
-  if (result) showChangePasswordModal.value = false
-}
-const handleImportPasswordVerify = async () => {
-  if (!importDataInput.value) {
-    importDataError.value = '数据不能为空'
-    return
-  }
-  
-  if (!importPasswordInput.value) {
-    importPasswordError.value = '主密码不能为空'
-    return
-  }
-  
-  await verifyAndApplyImportData(
-    importDataInput.value,
-    importPasswordInput.value,
-    accounts.value,
-    masterSalt,
-    masterKey,
-    config.value,
-    getHardwareKey
-  )
 }
 
 const startCountdown = () => {
@@ -328,10 +168,7 @@ const openAddModal = () => {
     algorithm: 'SHA1', digits: 6,
     encrypted: false
   }
-  nameError.value = false
-  secretError.value = false
-  secretErrorMsg.value = '密钥不合法'
-  nameWarn.value = false
+  nameError.value = false; secretError.value = false; secretErrorMsg.value = '密钥不合法'
   showModal.value = true
   showSecret.value = false
   activeModalDropdown.value = null
@@ -354,12 +191,11 @@ const finalizeForm = async () => {
     }
   }
 
-  nameError.value = false
-  secretError.value = false
+  nameError.value = false; secretError.value = false
   const nameVal = (modalForm.value.name || '').toString().trim()
   const secretVal = (modalForm.value.secret || '').toString().trim().replace(/\s/g, '')
 
-  if (!nameVal) { nameError.value = true; nameWarn.value = false; return }
+  if (!nameVal) { nameError.value = true; return }
   if (!secretVal) { secretErrorMsg.value = '请输入密钥'; secretError.value = true; return }
 
   try {
@@ -372,14 +208,6 @@ const finalizeForm = async () => {
   }
 
   const secureAccount = { ...JSON.parse(JSON.stringify(modalForm.value)), name: nameVal, secret: secretVal }
-
-  // 检测同名（排除自身，编辑时不与自己比较）
-  const isDuplicate = accounts.value.some(a => a.name.toLowerCase() === nameVal.toLowerCase() && a.id !== secureAccount.id)
-  if (isDuplicate && !nameWarn.value) {
-    nameWarn.value = true
-    return
-  }
-  nameWarn.value = false
 
   if (secureAccount.id) {
     const idx = accounts.value.findIndex(a => a.id === secureAccount.id)
@@ -419,12 +247,8 @@ const handleAction = (action: string) => {
   if (action === 'edit') {
     modalTitle.value = '修改账号'
     modalForm.value = JSON.parse(JSON.stringify(acc))
-    nameError.value = false
-    secretError.value = false
-    nameWarn.value = false
-    showModal.value = true
-    showSecret.value = false
-    activeModalDropdown.value = null
+    nameError.value = false; secretError.value = false
+    showModal.value = true; showSecret.value = false; activeModalDropdown.value = null
   } else if (action === 'delete') {
     confirmData.value = { name: acc.name, id: acc.id }
     showConfirm.value = true
@@ -548,12 +372,9 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       <div v-if="accounts.length === 0" class="empty-tip-container">
         <div class="empty-tip">暂无账号</div>
       </div>
-      <div v-else-if="filteredAccounts.length === 0" class="empty-tip-container">
-        <div class="empty-tip">无匹配结果</div>
-      </div>
       <transition-group name="list" tag="div" class="list-container">
         <AccountCard 
-          v-for="{ acc, index } in filteredAccounts" 
+          v-for="(acc, index) in accounts" 
           :key="acc.id" 
           :acc="acc" 
           :index="index"
@@ -581,28 +402,22 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       v-model:show="showSettings"
       v-model:showSelectMenu="showSelectMenu"
       v-model:showNextSelectMenu="showNextSelectMenu"
-      v-model:showPinyinSelectMenu="showPinyinSelectMenu"
       :config="config"
       @save-config="saveConfig(config)"
       @reset-database="handleResetDatabase"
-      @export-data="handleExportData"
-      @import-data="handleImportData"
-      @change-password="handleChangePassword"
     />
 
     <EditModal 
-      :show="showModal"
+      v-model:show="showModal"
       v-model:modelValue="modalForm"
       v-model:activeDropdown="activeModalDropdown"
       v-model:showSecret="showSecret"
       :title="modalTitle"
       :nameError="nameError"
-      :nameWarn="nameWarn"
       :secretError="secretError"
       :secretErrorMsg="secretErrorMsg"
       @submit="finalizeForm"
       @eye-click="handleEyeClick"
-      @update:show="(v) => { showModal = v; if (!v) nameWarn = false }"
     />
 
     <!-- Priority Modals (Authentication) -->
@@ -622,28 +437,6 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       @verify="verifyMasterPassword"
       @cancel="showVerifyPasswordModal = false"
       @focus="verifyErrorMsg = ''"
-    />
-
-    <ImportDataModal 
-      v-model:show="showImportModal"
-      v-model:dataInput="importDataInput"
-      v-model:passwordInput="importPasswordInput"
-      :dataError="importDataError"
-      :passwordError="importPasswordError"
-      @verify="handleImportPasswordVerify"
-      @cancel="cancelImport"
-    />
-
-    <ChangePasswordModal
-      v-model:show="showChangePasswordModal"
-      :currentError="changePwdCurrentError"
-      :newError="changePwdNewError"
-      :confirmError="changePwdConfirmError"
-      @update:currentPassword="changePwdCurrent = $event"
-      @update:newPassword="changePwdNew = $event"
-      @update:confirmPassword="changePwdConfirm = $event"
-      @submit="handleChangePasswordSubmit"
-      @cancel="showChangePasswordModal = false"
     />
 
     <ConfirmModal 
@@ -673,24 +466,17 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       @cancel="showResetConfirmModal = false"
     />
 
-    <ConfirmModal
-      v-model:show="showExportConfirmModal"
-      title="确定要导出数据吗？"
-      tip="导出的数据使用当前主密码进行加密，导入时也需要主密码进行解密，请牢记你的主密码"
-      confirmText="导出"
-      cancelText="取消"
-      :isDanger="false"
-      :countdown="exportCountdown"
-      @confirm="confirmExport"
-      @cancel="showExportConfirmModal = false"
-    />
-
     <!-- About Modal -->
     <transition name="modal-fade">
       <div class="modal-overlay" v-if="showAbout" @click.self="showAbout = false">
         <div class="modal-content">
           <div class="modal-title">关于插件</div>
           <div class="about-content">
+            <div class="about-section">
+              <span class="about-label">插件作者</span>
+              <a href="javascript:void(0)" @click="openExternal('https://github.com/dishuo183')"
+                class="about-link">Github (dishuo183)</a>
+            </div>
             <div class="about-section">
               <span class="about-label">插件反馈</span>
               <a href="javascript:void(0)" @click="openExternal('https://github.com/dishuo183/ZTools-plugins/issues')"
@@ -700,9 +486,6 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
               <span class="about-label">工具仓库</span>
               <a href="javascript:void(0)" @click="openExternal('https://github.com/ZToolsCenter/ZTools')"
                 class="about-link">Github (ZToolsCenter/ZTools)</a>
-            </div>
-            <div class="about-disclaimer">
-              本项目<strong>全部代码均由人工智能（AI）生成</strong><br>项目作者不具备相关编程能力，无法对代码内容提供技术解释，亦不作任何功能或稳定性保证。如遇问题或有改进建议，欢迎自行修改、Fork 或提交 Issue。
             </div>
           </div>
           <div class="modal-actions">
@@ -782,7 +565,6 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
-  position: relative;
 }
 
 .card {
@@ -790,7 +572,7 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
   backdrop-filter: blur(14px);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 18px 18px;
+  padding: 17.4px 18px;
   position: relative;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   display: flex;
@@ -1010,12 +792,6 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
   font-weight: 700; /* 加粗 */
 }
 
-.label-warn {
-  color: #e6a23c;
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .settings-select {
   position: relative;
   padding: 10px 16px;
@@ -1181,13 +957,6 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
   font-weight: 500;
 }
 
-.about-disclaimer {
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 1.6;
-  opacity: 0.8;
-}
-
 .pin-indicator {
   position: absolute;
   left: 0;
@@ -1301,27 +1070,7 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
 }
 
 .list-move {
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.list-enter-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.list-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  position: absolute;
-  pointer-events: none;
-}
-
-.list-enter-from {
-  opacity: 0;
-  transform: scale(0.96);
-}
-
-.list-leave-to {
-  opacity: 0;
-  transform: scale(0.96) translateY(-6px);
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }

@@ -7,7 +7,6 @@ const props = defineProps<{
   modelValue: any,
   activeDropdown: string | null,
   nameError: boolean,
-  nameWarn: boolean,
   secretError: boolean,
   secretErrorMsg: string,
   showSecret: boolean
@@ -61,9 +60,8 @@ const handlePeriodClick = (p: number) => {
             <label>
               <span>账号名称</span>
               <span v-if="nameError" class="label-error">请输入账号名称</span>
-              <span v-else-if="nameWarn" class="label-warn">已存在同名账号，再次确认保存</span>
             </label>
-            <input type="text" v-model="modelValue.name" placeholder="例如: Github" ref="nameInput" spellcheck="false">
+            <input type="text" v-model="modelValue.name" placeholder="例如: Github" ref="nameInput">
           </div>
           <div class="form-item full-width">
             <label>
@@ -71,7 +69,7 @@ const handlePeriodClick = (p: number) => {
               <span v-if="secretError" class="label-error">{{ secretErrorMsg }}</span>
             </label>
             <div class="form-input-container">
-              <input :type="showSecret ? 'text' : 'password'" v-model="modelValue.secret" placeholder="例如：A1B2C3D4..." spellcheck="false">
+              <input :type="showSecret ? 'text' : 'password'" v-model="modelValue.secret" placeholder="例如：A1B2C3D4...">
               <div class="eye-btn" @click="emits('eye-click')">
                 <svg v-if="showSecret" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
