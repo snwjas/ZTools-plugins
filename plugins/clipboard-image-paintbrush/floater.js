@@ -4,11 +4,20 @@
 
   // ---------- 读取传入的图片数据 ----------
   const key = (location.hash || '').slice(1)
-  const dataUrl = key ? localStorage.getItem(key + '_img') : null
+  let dataUrl = key ? localStorage.getItem(key + '_img') : null
   const sourcePath = key ? localStorage.getItem(key + '_src') : ''
+  const imgFile = key ? localStorage.getItem(key + '_imgFile') : ''
+
+  // localStorage 装不下大图时 preload 会回退到临时文件，这里读出来
+  if (!dataUrl && imgFile && window.floaterAPI && window.floaterAPI.readImageFile) {
+    dataUrl = window.floaterAPI.readImageFile(imgFile)
+    if (window.floaterAPI.cleanupTempFile) window.floaterAPI.cleanupTempFile(imgFile)
+  }
+
   if (key) {
     localStorage.removeItem(key + '_img')
     localStorage.removeItem(key + '_src')
+    localStorage.removeItem(key + '_imgFile')
   }
 
   if (!dataUrl) {
@@ -166,7 +175,8 @@
       const snap = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height)
       state.history = state.history.slice(0, state.historyIndex + 1)
       state.history.push(snap)
-      if (state.history.length > 50) {
+      // 4K 图片单张 ImageData ≈ 35MB；20 步上限足够标注场景使用，同时避免 OOM
+      if (state.history.length > 20) {
         state.history.shift()
       } else {
         state.historyIndex++
@@ -256,6 +266,16 @@
   }
 
   function drawMosaicAt(x, y) {
+    if (!imgCanvas.width || !imgCanvas.height) return
+    if (!state.rawImageData) {
+      try {
+        state.rawImageData = imgCtx.getImageData(0, 0, imgCanvas.width, imgCanvas.height).data
+      } catch (e) { return }
+    }
+    const data = state.rawImageData
+    const w = imgCanvas.width
+    const h = imgCanvas.height
+
     const radius = state.size * 6
     const block = Math.max(6, state.size * 2)
     const startX = Math.floor(x - radius)
@@ -265,12 +285,10 @@
       for (let by = 0; by < size; by += block) {
         const sx = Math.floor(startX + bx + block / 2)
         const sy = Math.floor(startY + by + block / 2)
-        if (sx < 0 || sy < 0 || sx >= imgCanvas.width || sy >= imgCanvas.height) continue
-        try {
-          const d = imgCtx.getImageData(sx, sy, 1, 1).data
-          drawCtx.fillStyle = 'rgba(' + d[0] + ',' + d[1] + ',' + d[2] + ',1)'
-          drawCtx.fillRect(startX + bx, startY + by, block, block)
-        } catch (e) {}
+        if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue
+        const i = (sy * w + sx) * 4
+        drawCtx.fillStyle = 'rgba(' + data[i] + ',' + data[i + 1] + ',' + data[i + 2] + ',1)'
+        drawCtx.fillRect(startX + bx, startY + by, block, block)
       }
     }
   }

@@ -25,6 +25,31 @@ function dataUrlToBuffer(dataUrl) {
 }
 
 window.floaterAPI = {
+  // 当 localStorage 容量爆掉时，preload 会把图片写到临时文件，
+  // floater.js 通过这个 API 把它读成 dataUrl，再喂给 <img>
+  readImageFile: function (filePath) {
+    try {
+      if (!filePath || !fs.existsSync(filePath)) return null
+      const ext = (path.extname(filePath).slice(1) || 'png').toLowerCase()
+      const mime = ({
+        bmp: 'image/bmp', gif: 'image/gif', jpeg: 'image/jpeg',
+        jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', ico: 'image/x-icon'
+      })[ext] || 'image/png'
+      const buf = fs.readFileSync(filePath)
+      return 'data:' + mime + ';base64,' + buf.toString('base64')
+    } catch (e) { return null }
+  },
+
+  // 读完之后由 floater.js 调用，把临时文件清理掉
+  cleanupTempFile: function (filePath) {
+    try {
+      if (!filePath) return
+      if (filePath.indexOf('ztools-clipboard-paintbrush-') < 0) return // 安全保护
+      fs.unlink(filePath, function () {})
+    } catch (e) {}
+  },
+
+
   // 弹出系统保存对话框并将合成后的 PNG 写入磁盘
   saveImage: function (dataUrl, suggestedName) {
     try {

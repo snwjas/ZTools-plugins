@@ -5,6 +5,7 @@
 const { clipboard, ipcRenderer } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 
 const MIME_MAP = {
   bmp: 'image/bmp',
@@ -181,7 +182,25 @@ function openFloater(dataUrl, sourcePath) {
     } catch (e) {}
 
     const key = uuid()
-    localStorage.setItem(key + '_img', dataUrl)
+    // 优先用 localStorage 跨页传递；如果图片过大触发 QuotaExceededError，
+    // 自动回退到把图片写到系统临时文件，floater 通过 _imgFile 路径再读回来
+    let usedFile = ''
+    try {
+      localStorage.setItem(key + '_img', dataUrl)
+    } catch (e) {
+      try { localStorage.removeItem(key + '_img') } catch (_) {}
+      try {
+        const tmpPath = path.join(os.tmpdir(), 'ztools-clipboard-paintbrush-' + key + '.png')
+        const comma = dataUrl.indexOf(',')
+        const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl
+        fs.writeFileSync(tmpPath, Buffer.from(base64, 'base64'))
+        usedFile = tmpPath
+        localStorage.setItem(key + '_imgFile', tmpPath)
+      } catch (e2) {
+        notify('图片过大且写入临时文件失败：' + (e2 && e2.message ? e2.message : e2))
+        return
+      }
+    }
     localStorage.setItem(key + '_src', sourcePath || '')
 
     const win = window.ztools.createBrowserWindow(
