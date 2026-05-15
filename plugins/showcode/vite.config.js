@@ -24,5 +24,20 @@ export default defineConfig({
   define: {
     'import.meta.client': 'true'
   },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (
+          warning.code === 'INVALID_ANNOTATION' &&
+          warning.id?.includes('/node_modules/@vueuse/core/') &&
+          warning.message.includes('#__PURE__')
+        ) {
+          return
+        }
+
+        warn(warning)
+      }
+    }
+  },
   base: './'
 })

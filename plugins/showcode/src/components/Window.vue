@@ -118,7 +118,9 @@
                     class="window-title-input appearance-none border-0 bg-transparent p-0 text-center text-sm font-medium shadow-none focus:ring-0"
                 />
 
-                <span v-else class="window-title-placeholder text-sm font-medium">Untitled-1</span>
+                <span v-else class="window-title-placeholder text-sm font-medium">
+                    {{ t('placeholder.defaultExportName') }}
+                </span>
             </div>
         </div>
 
@@ -962,6 +964,7 @@
 <script setup>
 import chroma from 'chroma-js';
 import useFonts from '@/composables/useFonts';
+import useI18n from '@/composables/useI18n';
 import { get, merge, cloneDeep, capitalize } from 'lodash';
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue';
 
@@ -997,6 +1000,7 @@ defineExpose({
 const emit = defineEmits(['update:scale', 'update:title']);
 
 const { fontFamilies } = useFonts();
+const { t } = useI18n();
 
 const root = ref(null);
 const codeWindowContent = ref(null);

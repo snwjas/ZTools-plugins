@@ -20,7 +20,7 @@
                     <CheckCircleIcon v-if="copied" class="h-4 w-4 text-green-400" />
                     <ClipboardIcon v-else class="h-4 w-4" />
                     <span class="hidden sm:inline">
-                        {{ copied ? 'Copied!' : 'Copy Image' }}
+                        {{ copied ? t('action.copied') : t('action.copyImage') }}
                     </span>
                 </Button>
 
@@ -30,7 +30,7 @@
                     button-class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl shadow-lg"
                 >
                     <ShareIcon class="h-4 w-4" />
-                    <span class="hidden sm:inline">Export Image</span>
+                    <span class="hidden sm:inline">{{ t('action.exportImage') }}</span>
                 </Dropdown>
             </div>
         </div>
@@ -90,7 +90,7 @@
                         @click="resetViewport"
                     >
                         <RefreshCwIcon class="h-4 w-4" />
-                        <span class="hidden md:inline">Reset Viewport</span>
+                        <span class="hidden md:inline">{{ t('action.resetViewport') }}</span>
                     </Button>
                 </div>
 
@@ -134,15 +134,15 @@
 
             <ControlTabs
                 :tabs="[
-                    { name: 'code-preview', title: 'Preview' },
-                    { name: 'themes', title: 'Themes' },
+                    { name: 'code-preview', title: t('common.preview') },
+                    { name: 'themes', title: t('common.themes') },
                     {
                         name: 'backgrounds',
-                        title: 'Backgrounds',
+                        title: t('common.backgrounds'),
                         disabled: hasScene,
                         locked: hasScene,
                     },
-                    { name: 'scenes', title: 'Scenes' },
+                    { name: 'scenes', title: t('common.scenes') },
                 ]"
             >
                 <template #default="{ active }">
@@ -211,6 +211,7 @@ import useClipboard from '@/composables/useClipboard';
 import useBackgrounds from '@/composables/useBackgrounds';
 import useAspectRatios from '@/composables/useAspectRatios';
 import usePreferencesStore from '@/composables/usePreferencesStore';
+import useI18n from '@/composables/useI18n';
 import { ref, watch, toRefs, nextTick, computed, onMounted, onBeforeUnmount } from 'vue';
 
 const props = defineProps({
@@ -239,6 +240,7 @@ const { buildCodeBlocks } = useShiki();
 const { copy, copied } = useClipboard();
 
 const preferences = usePreferencesStore();
+const { t } = useI18n();
 
 const { zoom, zoomTo, createPanZoom, resetViewport } = usePanZoom(props.viewport, {
     startY: -150,
@@ -327,12 +329,12 @@ function saveAs(method) {
     }[method];
 
     generateImageFromPreview(method, preferences.exportPixelRatio).then(async (dataUrl) => {
-        const filename = name.value || title.value || 'Untitled-1';
+        const filename = name.value || title.value || t('placeholder.defaultExportName');
         const file = `${filename}.${extension}`;
 
         if (window.services?.writeImageFile) {
             await window.services.writeImageFile(dataUrl, file);
-            window.ztools?.showNotification?.(`Saved ${file}`);
+            window.ztools?.showNotification?.(t('notification.savedFile', { file }));
             return;
         }
 
@@ -347,7 +349,7 @@ function copyToClipboard() {
         return $bus.$emit(
             'alert',
             'danger',
-            'Unable to access window.navigator.clipboard. You may have to grant clipboard access for Showcode. Please use the "Export" button instead.'
+            t('notification.clipboardUnavailable')
         );
     }
 
@@ -364,7 +366,7 @@ function copyToClipboard() {
                 : $bus.$emit(
                       'alert',
                       'danger',
-                      'In order to copy images to the clipboard, Showcode.app needs access to the ClipboardItem web API, which is not accessible in Firefox. Please use the "Export" button instead.'
+                      t('notification.firefoxClipboardUnavailable')
                   );
         default:
             return promise.then(copy);
@@ -379,7 +381,7 @@ function updateWithCustomBackground(id) {
 }
 
 function deleteBackground(id) {
-    if (!confirm('Delete this background?')) {
+    if (!confirm(t('confirm.deleteBackground'))) {
         return;
     }
 

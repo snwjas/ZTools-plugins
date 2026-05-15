@@ -1,5 +1,9 @@
 <template>
-    <Toggle v-bind="$attrs" popover-title="Header Properties" settings-tooltip="Configure Header">
+    <Toggle
+        v-bind="$attrs"
+        :popover-title="`${t('common.header')} ${t('common.settings')}`"
+        :settings-tooltip="t('tooltip.configureHeader')"
+    >
         <template #popover>
             <div
                 class="grid grid-cols-2 grid-rows-2"
@@ -10,7 +14,7 @@
                 <div
                     class="flex items-center justify-between gap-2 border-r border-b border-zinc-200 p-2 dark:border-zinc-800"
                 >
-                    <Label>Title</Label>
+                    <Label>{{ t('common.title') }}</Label>
 
                     <div class="flex items-center">
                         <Toggle
@@ -23,7 +27,7 @@
                 <div
                     class="flex items-center justify-between gap-2 border-b border-zinc-200 p-2 dark:border-zinc-800"
                 >
-                    <Label>Accent</Label>
+                    <Label>{{ t('common.accent') }}</Label>
 
                     <div class="flex items-center">
                         <Toggle
@@ -36,7 +40,7 @@
                 <div
                     class="flex items-center justify-between gap-2 border-r border-zinc-200 p-2 dark:border-zinc-800"
                 >
-                    <Label class="whitespace-nowrap">Menu</Label>
+                    <Label class="whitespace-nowrap">{{ t('common.menu') }}</Label>
 
                     <div class="flex items-center">
                         <Toggle
@@ -47,7 +51,7 @@
                 </div>
 
                 <div class="flex items-center justify-between gap-2 p-2">
-                    <Label class="whitespace-nowrap">Menu Color</Label>
+                    <Label class="whitespace-nowrap">{{ t('common.menuColor') }}</Label>
 
                     <div class="flex items-center">
                         <Toggle
@@ -62,6 +66,8 @@
 </template>
 
 <script setup>
+import useI18n from '@/composables/useI18n';
+
 defineProps({
     showTitle: { type: Boolean, required: true },
     showMenu: { type: Boolean, required: true },
@@ -76,4 +82,6 @@ defineEmits([
     'update:show-color-menu',
     'update:show-header-accent',
 ]);
+
+const { t } = useI18n();
 </script>

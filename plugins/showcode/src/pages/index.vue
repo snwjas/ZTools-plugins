@@ -98,6 +98,7 @@ import useCurrentTab from '@/composables/useCurrentTab';
 import useProjectStores from '@/composables/useProjectStores';
 import useTemplateStore from '@/composables/useTemplateStore';
 import useMetaThemeColor from '@/composables/useMetaThemeColor';
+import useI18n from '@/composables/useI18n';
 import { colorMode, initColorMode } from '@/composables/useApplicationStore';
 import { toast } from 'vue-sonner';
 import { Toaster } from '@/components/ui/sonner';
@@ -109,6 +110,7 @@ initColorMode();
 const config = useRuntimeConfig().public;
 
 const templates = useTemplateStore();
+const { t } = useI18n();
 
 const { update: updateMetaThemeColor } = useMetaThemeColor();
 
@@ -141,40 +143,40 @@ const newProjectFromTemplate = (template) => {
 };
 
 const removeTemplate = (template) => {
-    if (confirm('Delete this template?')) {
+    if (confirm(t('confirm.deleteTemplate'))) {
         templates.remove(template);
     }
 };
 
 const saveAsTemplate = () => {
     if (!currentProject.value) {
-        return toast.error('There was a problem locating the current project.');
+        return toast.error(t('notification.projectNotFound'));
     }
 
     currentProject.value.saveAsTemplate();
 
-    toast.success('Successfully saved template.');
+    toast.success(t('notification.savedTemplate'));
 };
 
 const setTemplateAsDefault = (template) => {
     templates.setAsDefault(template);
 
-    toast.success(`"${template.tab.name}" is now the default template.`);
+    toast.success(t('notification.templateDefaultSet', { name: template.tab.name }));
 };
 
 const clearTemplateAsDefault = (template) => {
     templates.clearAsDefault();
 
-    toast.success(`"${template.tab.name}" is no longer the default template.`);
+    toast.success(t('notification.templateDefaultCleared', { name: template.tab.name }));
 };
 
 const renameTemplate = (template) => {
-    const newName = prompt('Enter new template name:', template.tab.name);
+    const newName = prompt(t('prompt.templateName'), template.tab.name);
 
     if (newName && newName.trim() && newName.trim() !== template.tab.name) {
         templates.rename(template, newName.trim());
 
-        toast.success(`Template renamed to "${newName.trim()}".`);
+        toast.success(t('notification.templateRenamed', { name: newName.trim() }));
     }
 };
 
@@ -182,7 +184,7 @@ const fileOptions = computed(() => {
     return [
         {
             name: 'preferences',
-            title: 'Preferences',
+            title: t('menu.preferences'),
             click: () => (showingPreferencesModal.value = true),
         },
         {
@@ -190,12 +192,12 @@ const fileOptions = computed(() => {
         },
         {
             name: 'save-as-template',
-            title: 'Save As Template',
+            title: t('menu.saveAsTemplate'),
             click: saveAsTemplate,
         },
         {
             name: 'open-templates-modal',
-            title: 'Open Saved Templates',
+            title: t('menu.openTemplates'),
             click: () => (showingTemplatesModal.value = true),
         },
         {
@@ -203,12 +205,12 @@ const fileOptions = computed(() => {
         },
         {
             name: 'export-config',
-            title: 'Export JSON Configuration',
+            title: t('menu.exportConfig'),
             click: () => currentProject.value?.export(),
         },
         {
             name: 'import-config',
-            title: 'Import JSON Configuration',
+            title: t('action.importConfig'),
             click: importNewProject,
         },
         {
@@ -216,7 +218,7 @@ const fileOptions = computed(() => {
         },
         {
             name: 'help',
-            title: 'Help Guide',
+            title: t('menu.help'),
             click: () => (showingHelpModal.value = true),
         },
     ];

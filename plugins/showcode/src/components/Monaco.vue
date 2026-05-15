@@ -11,6 +11,7 @@ import { useNuxtApp } from '@/nuxt-compat';
 import useFonts from '@/composables/useFonts';
 import useApplicationStore from '@/composables/useApplicationStore';
 import usePreferencesStore from '@/composables/usePreferencesStore';
+import themeList from '@/data/monaco-themes/themelist.json';
 
 const props = defineProps({
     value: { type: String, default: '' },
@@ -124,8 +125,6 @@ onMounted(async () => {
     monacoRef.value = monaco;
 
     // Load themes
-    const themeList = (await import('../data/monaco-themes/themelist.json')).default;
-
     const themeLoaders = import.meta.glob(
         ['../data/monaco-themes/*.json', '!../data/monaco-themes/themelist.json'],
         { import: 'default' }

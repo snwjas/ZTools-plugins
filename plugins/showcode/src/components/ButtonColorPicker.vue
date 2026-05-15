@@ -8,7 +8,13 @@
         <Button class="tooltip-target w-full">
             <span class="h-6 w-6 rounded-full" :style="{ backgroundColor: solid }" />
 
-            Pick Color
+            {{ t('action.pickColor') }}
         </Button>
     </ColorPicker>
 </template>
+
+<script setup>
+import useI18n from '@/composables/useI18n';
+
+const { t } = useI18n();
+</script>

@@ -4,11 +4,15 @@ import { defineStore } from 'pinia';
 import { namespace } from './useProjectStores';
 import useTemplateStore from './useTemplateStore';
 import { cloneDeep, replace } from 'lodash';
+import usePreferencesStore from '@/composables/usePreferencesStore';
+import { translate } from '@/i18n/messages';
 
-async function saveTextFile(text, filename) {
+async function saveTextFile(text, filename, locale) {
     if (window.services?.writeTextFile) {
         const filePath = await window.services.writeTextFile(text, filename);
-        window.ztools?.showNotification?.(`Saved ${filename}`);
+        window.ztools?.showNotification?.(
+            translate(locale, 'notification.savedFile', { file: filename })
+        );
         return filePath;
     }
 
@@ -54,10 +58,17 @@ export default function (id) {
              */
             export() {
                 const state = this.clone();
+                const preferences = usePreferencesStore();
 
-                const name = state.tab.name || 'Untitled Project';
+                const name =
+                    state.tab.name ||
+                    translate(preferences.uiLocale, 'placeholder.defaultProjectName');
 
-                void saveTextFile(JSON.stringify(state, null, 2), `${name}.json`);
+                void saveTextFile(
+                    JSON.stringify(state, null, 2),
+                    `${name}.json`,
+                    preferences.uiLocale
+                );
             },
 
             /**
@@ -70,7 +81,11 @@ export default function (id) {
 
                 project.tab.created_at = new Date();
 
-                project.tab.name = project.tab.name || 'Untitled Project';
+                const preferences = usePreferencesStore();
+
+                project.tab.name =
+                    project.tab.name ||
+                    translate(preferences.uiLocale, 'placeholder.defaultProjectName');
 
                 templates.add(project);
             },

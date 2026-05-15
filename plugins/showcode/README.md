@@ -57,3 +57,4 @@ vite.config.js
 - 上游项目: [stevebauman/showcode](https://github.com/stevebauman/showcode)
 - 许可: MIT License
 - 许可证文本见 [LICENSE](LICENSE)
+- 与上游的主要差异见 [UPSTREAM.md](UPSTREAM.md)

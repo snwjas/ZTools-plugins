@@ -11,7 +11,7 @@
                         <label
                             class="hidden whitespace-nowrap pl-2 text-xs font-semibold uppercase leading-none tracking-wide text-zinc-400 dark:text-zinc-500 xl:inline-block"
                         >
-                            Lang
+                            {{ t('editor.lang') }}
                         </label>
 
                         <Select
@@ -36,7 +36,7 @@
                             <label
                                 class="hidden whitespace-nowrap pl-2 text-xs font-semibold uppercase leading-none tracking-wide text-zinc-400 dark:text-zinc-500 xl:inline-block"
                             >
-                                Tab Size
+                                {{ t('common.tabSize') }}
                             </label>
 
                             <Select
@@ -63,7 +63,7 @@
                             :class="{ 'mr-2': !canToggleLayout }"
                         >
                             <PopoverPanel
-                                title="Emoji Picker"
+                                :title="t('editor.emojiPicker')"
                                 auto-hide
                                 :resets="false"
                                 class="flex h-full items-stretch"
@@ -71,7 +71,7 @@
                                 <template #trigger>
                                     <ToolbarButton
                                         class="mr-0.5 rounded-lg"
-                                        v-tooltip="'Add Emoji'"
+                                        v-tooltip="t('action.addEmoji')"
                                     >
                                         <SmileIcon class="h-5 w-5" />
                                     </ToolbarButton>
@@ -81,7 +81,7 @@
                                     <Input
                                         v-model="search"
                                         type="search"
-                                        placeholder="Search..."
+                                        :placeholder="t('common.search')"
                                         class="w-full"
                                     />
                                 </div>
@@ -107,7 +107,7 @@
                                 v-if="canRemove && canMoveUp"
                                 class="mr-0.5 rounded-l-lg"
                                 @click="$emit('up', id)"
-                                v-tooltip="'Move Editor'"
+                                v-tooltip="t('action.moveEditor')"
                             >
                                 <ArrowUpIcon
                                     class="h-5 w-5"
@@ -120,7 +120,7 @@
                                 :class="{ 'rounded-l-lg': !canMoveUp }"
                                 class="mr-0.5"
                                 @click="$emit('remove', id)"
-                                v-tooltip="'Remove Editor'"
+                                v-tooltip="t('action.removeEditor')"
                             >
                                 <MinusIcon class="h-5 w-5" />
                             </ToolbarButton>
@@ -132,7 +132,7 @@
                                     'rounded-l-lg': !canRemove && !canMoveUp,
                                 }"
                                 @click="$emit('add')"
-                                v-tooltip="'Add Editor'"
+                                v-tooltip="t('action.addEditor')"
                             >
                                 <PlusIcon class="h-5 w-5" />
                             </ToolbarButton>
@@ -141,7 +141,7 @@
                                 v-if="canRemove && canMoveDown"
                                 class="rounded-r-lg"
                                 @click="$emit('down', id)"
-                                v-tooltip="'Move Editor'"
+                                v-tooltip="t('action.moveEditor')"
                             >
                                 <ArrowDownIcon
                                     class="h-5 w-5"
@@ -155,7 +155,7 @@
                                 v-if="landscape"
                                 class="rounded-l-lg"
                                 @click="$emit('update:layout')"
-                                v-tooltip="'Toggle Layout'"
+                                v-tooltip="t('action.toggleLayout')"
                             >
                                 <CreditCardIcon class="h-5 w-5" />
                             </ToolbarButton>
@@ -164,7 +164,7 @@
                                 v-else
                                 class="rounded-l-lg"
                                 @click="$emit('update:layout')"
-                                v-tooltip="'Toggle Layout'"
+                                v-tooltip="t('action.toggleLayout')"
                             >
                                 <ColumnsIcon class="h-5 w-5" />
                             </ToolbarButton>
@@ -172,7 +172,7 @@
                             <ToolbarButton
                                 class="rounded-r-lg"
                                 @click="$emit('update:reverse')"
-                                v-tooltip="'Move Editor Pane'"
+                                v-tooltip="t('action.moveEditorPane')"
                             >
                                 <LogInIcon
                                     class="h-5 w-5"
@@ -229,6 +229,7 @@ import Fuse from 'fuse.js';
 import groupedEmojis from '~/data/emojis';
 import { useResizeObserver } from '@vueuse/core';
 import { debounce, orderBy, flatten } from 'lodash';
+import useI18n from '@/composables/useI18n';
 
 // @see https://github.com/muan/unicode-emoji-json
 const emojis = flatten(Object.keys(groupedEmojis).map((group) => groupedEmojis[group])).filter(
@@ -267,6 +268,7 @@ defineEmits([
 
 const { sizes, orientation, language } = toRefs(props);
 const { $bus, $shiki } = useNuxtApp();
+const { t } = useI18n();
 
 const width = ref(0);
 const height = ref(0);
