@@ -37,7 +37,7 @@ npm run package
 ```
 
 - 构建产物输出到 `dist/`
-- 打包文件输出到项目根目录，形如 `showcode-v1.0.0.zip`
+- 打包文件输出到项目根目录，形如 `showcode-v1.1.0.zip`
 
 ## 项目结构
 
