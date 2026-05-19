@@ -41,6 +41,10 @@ function hasMeaningfulRemoteAddress(entry: PortUsage) {
   return !['', '0.0.0.0:0', '*:*', '[::]:0'].includes(remoteAddress)
 }
 
+function includesInFields(fields: Array<string | number>, query: string) {
+  return fields.some((item) => normalizeSearchText(String(item)).includes(query))
+}
+
 function matchEntryByField(entry: PortUsage, field: FilterField, value: string) {
   const query = normalizeSearchText(value)
   if (!query) {
@@ -48,9 +52,9 @@ function matchEntryByField(entry: PortUsage, field: FilterField, value: string) 
   }
 
   if (field === 'all') {
-    return [
+    return includesInFields([
       entry.processName,
-      String(entry.pid),
+      entry.pid,
       entry.localAddress,
       entry.localHost,
       entry.localPort,
@@ -59,7 +63,7 @@ function matchEntryByField(entry: PortUsage, field: FilterField, value: string) 
       entry.remotePort,
       entry.protocol,
       entry.state
-    ].some((item) => normalizeSearchText(item).includes(query))
+    ], query)
   }
 
   if (field === 'name') {
@@ -67,31 +71,19 @@ function matchEntryByField(entry: PortUsage, field: FilterField, value: string) 
   }
 
   if (field === 'pid') {
-    if (/^\d+$/.test(query)) {
-      return String(entry.pid) === query
-    }
-
-    return String(entry.pid).includes(query)
+    return includesInFields([entry.pid], query)
   }
 
   if (field === 'port') {
-    if (/^\d+$/.test(query)) {
-      return [entry.localPort, entry.remotePort].some((item) => normalizeSearchText(item) === query)
-    }
-
-    return [entry.localPort, entry.remotePort].some((item) => normalizeSearchText(item).includes(query))
+    return includesInFields([entry.localPort, entry.remotePort], query)
   }
 
   if (field === 'local') {
-    return [entry.localAddress, entry.localHost, entry.localPort].some((item) =>
-      normalizeSearchText(item).includes(query)
-    )
+    return includesInFields([entry.localAddress, entry.localHost, entry.localPort], query)
   }
 
   if (field === 'remote') {
-    return [entry.remoteAddress, entry.remoteHost, entry.remotePort].some((item) =>
-      normalizeSearchText(item).includes(query)
-    )
+    return includesInFields([entry.remoteAddress, entry.remoteHost, entry.remotePort], query)
   }
 
   if (field === 'state') {
