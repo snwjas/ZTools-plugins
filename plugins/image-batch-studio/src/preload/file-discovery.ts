@@ -3,7 +3,7 @@ import path from "node:path";
 import sharp from "sharp";
 import type { SourceFile } from "../shared/types";
 
-const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tif", ".tiff", ".gif"]);
+const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".heif", ".heic", ".tif", ".tiff", ".gif"]);
 const pdfExtensions = new Set([".pdf"]);
 const excludedDirectories = new Set([".git", "node_modules", ".DS_Store"]);
 

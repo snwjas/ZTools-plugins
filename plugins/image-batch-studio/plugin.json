@@ -35,7 +35,7 @@
           "type": "files",
           "fileType": "file",
           "label": "批量处理图片",
-          "extensions": ["jpg", "jpeg", "png", "webp", "avif", "tiff", "gif", "pdf"],
+          "extensions": ["jpg", "jpeg", "png", "webp", "avif", "heif", "heic", "tiff", "gif", "pdf"],
           "maxLength": 300
         },
         {

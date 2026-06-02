@@ -22,7 +22,34 @@ async function makeImage(filePath: string) {
     .toFile(filePath);
 }
 
+async function makeHeif(filePath: string) {
+  await sharp({
+    create: {
+      width: 12,
+      height: 8,
+      channels: 4,
+      background: "#87a5d8"
+    }
+  })
+    .heif({ quality: 80, compression: "av1" })
+    .toFile(filePath);
+}
+
 describe("file discovery", () => {
+  it("discovers HEIF and HEIC image files", async () => {
+    const dir = await makeTempDir();
+    const heif = path.join(dir, "sample.heif");
+    const heic = path.join(dir, "sample.heic");
+    await makeHeif(heif);
+    await makeHeif(heic);
+
+    const files = await discoverFiles([dir]);
+
+    expect(files.map((file) => file.path).sort()).toEqual([heic, heif].sort());
+    expect(files.every((file) => file.type === "image")).toBe(true);
+    expect(files.every((file) => file.format === "heif")).toBe(true);
+  });
+
   it("continues scanning when a child directory cannot be read", async () => {
     const dir = await makeTempDir();
     const readable = path.join(dir, "readable.png");

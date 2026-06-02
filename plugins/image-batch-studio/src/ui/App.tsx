@@ -65,7 +65,7 @@ const modules: Array<{ id: ModuleId; label: string; icon: typeof FileImage }> = 
   { id: "manual", label: "手裁", icon: Scissors }
 ];
 
-const formats: ImageFormat[] = ["jpeg", "png", "webp", "avif", "tiff", "gif"];
+const formats: ImageFormat[] = ["jpeg", "png", "webp", "avif", "heif", "tiff", "gif"];
 const positions: Array<{ value: WatermarkPosition; label: string }> = [
   { value: "northwest", label: "左上" },
   { value: "north", label: "上" },

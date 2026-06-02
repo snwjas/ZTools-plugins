@@ -29,6 +29,19 @@ async function makeImage(filePath: string, width: number, height: number, color:
     .toFile(filePath);
 }
 
+async function makeHeif(filePath: string, width: number, height: number, color: string) {
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: color
+    }
+  })
+    .heif({ quality: 80, compression: "av1" })
+    .toFile(filePath);
+}
+
 async function makePdf(filePath: string, text: string) {
   const doc = await PDFDocument.create();
   const page = doc.addPage([240, 120]);
@@ -37,11 +50,11 @@ async function makePdf(filePath: string, text: string) {
 }
 
 describe("offline processing engine", () => {
-  it("converts, resizes, crops, adds border, and rounds corners", async () => {
+  it("converts, resizes, crops, adds border, and rounds corners for HEIF inputs", async () => {
     const dir = await makeTempDir();
-    const input = path.join(dir, "source.png");
+    const input = path.join(dir, "source.heif");
     const outputDir = path.join(dir, "out");
-    await makeImage(input, 120, 90, "#2b7a78");
+    await makeHeif(input, 120, 90, "#2b7a78");
 
     const settings: ImageJobSettings = {
       output: { directory: outputDir, namingPattern: "{name}-processed.{ext}", overwrite: false },
@@ -62,11 +75,11 @@ describe("offline processing engine", () => {
     expect(metadata.height).toBe(58);
   });
 
-  it("adds text watermarks and keeps output readable by sharp", async () => {
+  it("adds text watermarks to HEIC inputs and keeps output readable by sharp", async () => {
     const dir = await makeTempDir();
-    const input = path.join(dir, "watermark.png");
+    const input = path.join(dir, "watermark.heic");
     const outputDir = path.join(dir, "out");
-    await makeImage(input, 100, 80, "#183a37");
+    await makeHeif(input, 100, 80, "#183a37");
 
     const [result] = await processImages([input], {
       output: { directory: outputDir, namingPattern: "{name}-wm.{ext}", overwrite: false },
@@ -90,13 +103,55 @@ describe("offline processing engine", () => {
     expect(metadata.height).toBe(80);
   });
 
-  it("adds image watermarks without changing canvas size", async () => {
+  it("processes HEIF and HEIC inputs through image modules", async () => {
     const dir = await makeTempDir();
-    const input = path.join(dir, "base.png");
-    const watermark = path.join(dir, "mark.png");
+    const heifInput = path.join(dir, "source.heif");
+    const heicInput = path.join(dir, "source.heic");
     const outputDir = path.join(dir, "out");
-    await makeImage(input, 120, 80, "#000000");
-    await makeImage(watermark, 20, 20, "#ff0000");
+    await makeHeif(heifInput, 64, 48, "#2388cc");
+    await makeHeif(heicInput, 50, 30, "#bb6f2a");
+
+    const results = await processImages([heifInput, heicInput], {
+      output: { directory: outputDir, namingPattern: "{name}-processed.{ext}", overwrite: false },
+      format: { type: "webp", quality: 82 },
+      resize: { mode: "fit", width: 32, withoutEnlargement: true }
+    });
+
+    expect(results).toHaveLength(2);
+    expect(results.every((result) => result.ok)).toBe(true);
+    const heifMeta = await sharp(results[0].outputPath).metadata();
+    const heicMeta = await sharp(results[1].outputPath).metadata();
+    expect(heifMeta.format).toBe("webp");
+    expect(heifMeta.width).toBe(32);
+    expect(heicMeta.format).toBe("webp");
+    expect(heicMeta.width).toBe(32);
+  });
+
+  it("converts supported images to HEIF output", async () => {
+    const dir = await makeTempDir();
+    const input = path.join(dir, "source.png");
+    const outputDir = path.join(dir, "out");
+    await makeImage(input, 48, 36, "#4455aa");
+
+    const [result] = await processImages([input], {
+      output: { directory: outputDir, namingPattern: "{name}.{ext}", overwrite: false },
+      format: { type: "heif", quality: 72 }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.outputPath.endsWith(".heif")).toBe(true);
+    const metadata = await sharp(result.outputPath).metadata();
+    expect(metadata.format).toBe("heif");
+    expect(metadata.compression).toBe("av1");
+  });
+
+  it("adds HEIC image watermarks to HEIF inputs without changing canvas size", async () => {
+    const dir = await makeTempDir();
+    const input = path.join(dir, "base.heif");
+    const watermark = path.join(dir, "mark.heic");
+    const outputDir = path.join(dir, "out");
+    await makeHeif(input, 120, 80, "#000000");
+    await makeHeif(watermark, 20, 20, "#ff0000");
 
     const [result] = await processImages([input], {
       output: { directory: outputDir, namingPattern: "{name}-image-wm.{ext}", overwrite: false },
@@ -124,11 +179,11 @@ describe("offline processing engine", () => {
     expect(centerPixel[2]).toBeLessThan(80);
   });
 
-  it("rotates and flips images while preserving readable output", async () => {
+  it("rotates and flips HEIC images while preserving readable output", async () => {
     const dir = await makeTempDir();
-    const input = path.join(dir, "rotate.png");
+    const input = path.join(dir, "rotate.heic");
     const outputDir = path.join(dir, "out");
-    await makeImage(input, 40, 20, "#335f9d");
+    await makeHeif(input, 40, 20, "#335f9d");
 
     const [result] = await processImages([input], {
       output: { directory: outputDir, namingPattern: "{name}-rotated.{ext}", overwrite: false },
@@ -178,10 +233,10 @@ describe("offline processing engine", () => {
   it("merges images vertically with stable dimensions", async () => {
     const dir = await makeTempDir();
     const first = path.join(dir, "one.png");
-    const second = path.join(dir, "two.png");
+    const second = path.join(dir, "two.heif");
     const output = path.join(dir, "joined.png");
     await makeImage(first, 40, 20, "#b4483f");
-    await makeImage(second, 40, 30, "#1f6f68");
+    await makeHeif(second, 40, 30, "#1f6f68");
 
     await mergeImages([first, second], output, {
       layout: "vertical",
@@ -197,7 +252,7 @@ describe("offline processing engine", () => {
   it("merges images horizontally and in a grid with stable dimensions", async () => {
     const dir = await makeTempDir();
     const first = path.join(dir, "one.png");
-    const second = path.join(dir, "two.png");
+    const second = path.join(dir, "two.heic");
     const third = path.join(dir, "three.png");
     const horizontal = path.join(dir, "horizontal.png");
     const grid = path.join(dir, "grid.png");
@@ -249,7 +304,7 @@ describe("offline processing engine", () => {
     const second = path.join(dir, "two.png");
     const output = path.join(dir, "motion.gif");
     await makeImage(first, 32, 24, "#d49b3d");
-    await makeImage(second, 32, 24, "#1f6f68");
+    await makeHeif(second, 32, 24, "#1f6f68");
 
     await createGif([first, second], output, {
       width: 32,

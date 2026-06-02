@@ -101,7 +101,7 @@ const services = {
     const paths = window.ztools.showOpenDialog({
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "Images and PDFs", extensions: ["jpg", "jpeg", "png", "webp", "avif", "tiff", "gif", "pdf"] }
+        { name: "Images and PDFs", extensions: ["jpg", "jpeg", "png", "webp", "avif", "heif", "heic", "tiff", "gif", "pdf"] }
       ]
     });
     return paths ? discoverFiles(paths) : [];
@@ -117,7 +117,7 @@ const services = {
   async chooseWatermarkImage() {
     const paths = window.ztools.showOpenDialog({
       properties: ["openFile"],
-      filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "avif", "tiff"] }]
+      filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "avif", "heif", "heic", "tiff"] }]
     });
     return paths?.[0];
   },

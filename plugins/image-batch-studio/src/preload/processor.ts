@@ -13,7 +13,7 @@ import type {
 } from "../shared/types";
 import { buildOutputPath, normalizeExtension } from "./paths";
 
-const imageExtensions = new Set(["jpg", "jpeg", "png", "webp", "avif", "tif", "tiff", "gif"]);
+const imageExtensions = new Set(["jpg", "jpeg", "png", "webp", "avif", "heif", "heic", "tif", "tiff", "gif"]);
 const maxMergeGap = 2000;
 const maxMergeDimension = 30000;
 const maxMergePixels = 80_000_000;
@@ -75,7 +75,8 @@ function formatFromPath(filePath: string): ImageFormat {
   const ext = path.extname(filePath).slice(1).toLowerCase();
   if (ext === "jpg") return "jpeg";
   if (ext === "tif") return "tiff";
-  if (ext === "jpeg" || ext === "png" || ext === "webp" || ext === "avif" || ext === "tiff" || ext === "gif") {
+  if (ext === "heic") return "heif";
+  if (ext === "jpeg" || ext === "png" || ext === "webp" || ext === "avif" || ext === "heif" || ext === "tiff" || ext === "gif") {
     return ext;
   }
   return "png";
@@ -144,6 +145,8 @@ function applyOutputFormat(image: Sharp, format: ImageFormat, settings: ImageJob
       return image.webp({ quality: quality ?? 82, effort: effort ?? 5, lossless });
     case "avif":
       return image.avif({ quality: quality ?? 58, effort: effort ?? 4, lossless });
+    case "heif":
+      return image.heif({ quality: quality ?? 72, effort: effort ?? 4, lossless, compression: "av1" });
     case "tiff":
       return image.tiff({ quality: quality ?? 90 });
     case "gif":
@@ -539,7 +542,7 @@ export async function createGif(
 }
 
 export function supportedOutputFormats(): ImageFormat[] {
-  return ["jpeg", "png", "webp", "avif", "tiff", "gif"];
+  return ["jpeg", "png", "webp", "avif", "heif", "tiff", "gif"];
 }
 
 export function extensionForFormat(format: ImageFormat): string {
