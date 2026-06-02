@@ -152,6 +152,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Trigger EdgeOne build hook
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          if [ -z "${EDGEONE_BUILD_URL}" ]; then
+            echo "EDGEONE_BUILD_URL is not set"
+            exit 1
+          fi
+
+          curl -fsS -X POST "${EDGEONE_BUILD_URL}"
+        env:
+          EDGEONE_BUILD_URL: ${{ secrets.EDGEONE_BUILD_URL || vars.EDGEONE_BUILD_URL }}
+
       # - name: Setup ossutil
       #   if: steps.detect.outputs.has_changes == 'true'
       #   run: |
