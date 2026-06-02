@@ -8,7 +8,7 @@ ZTools 图片批处理插件，提供面向图片文件、PDF 文件和文件夹
 
 ## 平台支持
 
-- macOS：当前版本已支持。
+- macOS：当前版本已支持 Apple Silicon M 系列（arm64）和 Intel（x64）。
 - Windows：适配开发中，后续版本发布。
 
 ## 功能
@@ -62,8 +62,9 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
+npm run verify:runtime
 npm run install:local
 npm run smoke:installed
 ```
 
-`smoke:installed` 会在本地生成测试图片和 PDF，验证图片处理、拼图、GIF 合成、PDF 合并以及 ZTools 安装记录。
+`verify:runtime` 会检测打包产物是否包含 macOS arm64/x64 两套 Sharp 运行时。`smoke:installed` 会在本地生成测试图片和 PDF，验证图片处理、拼图、GIF 合成、PDF 合并以及 ZTools 安装记录。
