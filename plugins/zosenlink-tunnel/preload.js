@@ -29,6 +29,7 @@ let state = {
   signal: null,
   lastError: "",
   clientId: "",
+  kernelVersion: "",
   configVersion: 0,
   frpsServer: "",
   mappings: [],
@@ -153,6 +154,7 @@ function applyClientEvent(event) {
   state.statusText = statusText(type);
   state.lastError = event.error || "";
   state.clientId = event.clientId || state.clientId;
+  state.kernelVersion = event.kernelVersion || state.kernelVersion;
   state.configVersion = event.configVersion || state.configVersion;
   state.frpsServer = event.frpsServer || state.frpsServer;
   if (Array.isArray(event.mappings)) {
@@ -790,6 +792,7 @@ function reset() {
     signal: null,
     lastError: "",
     clientId: "",
+    kernelVersion: "",
     configVersion: 0,
     frpsServer: "",
     mappings: []

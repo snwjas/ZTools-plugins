@@ -8,7 +8,7 @@
           </span>
           <div>
             <h1>中森互联</h1>
-            <p>客户端 {{ clientVersion }}</p>
+            <p>内核 {{ coreVersionText }}</p>
           </div>
         </div>
         <div class="top-actions">
@@ -101,7 +101,7 @@
                     </button>
                   </div>
                 </td>
-                <td>{{ mapping.bandwidth || "不限速" }}</td>
+                <td>{{ formatBandwidthForCustomer(mapping.bandwidth) }}</td>
                 <td>
                   <span class="pill" :class="mapping.enabled ? 'success' : 'muted'">
                     {{ mapping.enabled ? "启用" : "禁用" }}
@@ -207,7 +207,6 @@
 import { computed, onMounted, ref } from "vue";
 
 const STORAGE_KEY = "zosenlink-tunnel:activation-key";
-const clientVersion = "1.0.0-node";
 
 const activationKey = ref("");
 const boundKeyExists = ref(false);
@@ -265,6 +264,13 @@ const displayStatusText = computed(() => {
   if (status.value.status === "starting") return "连接中";
   return status.value.statusText || "未绑定";
 });
+const coreVersionText = computed(() => (
+  status.value.kernelVersion
+  || runtimeVersion.value
+  || status.value.runtimeVersion
+  || runtimeLatestVersion.value
+  || "-"
+));
 const statusClass = computed(() => {
   const current = status.value.status;
   if (current === "online" || current === "config_updated") return "success";
@@ -341,6 +347,24 @@ function formatBytes(bytes) {
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
   if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${value} B`;
+}
+
+function formatBandwidthForCustomer(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "0") return "不限速";
+  const match = text.match(/^(\d+(?:\.\d+)?)\s*(K|KB|M|MB)(?:\/S)?$/i);
+  if (!match) return text;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return text;
+  const unit = match[2].toUpperCase();
+  const mbps = unit.startsWith("M") ? amount * 8 : amount * 8 / 1024;
+  return `${formatBandwidthNumber(mbps)} Mbps`;
+}
+
+function formatBandwidthNumber(value) {
+  return Math.abs(value - Math.round(value)) < 0.000001
+    ? String(Math.round(value))
+    : value.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function applyRuntimeStatus(info) {
