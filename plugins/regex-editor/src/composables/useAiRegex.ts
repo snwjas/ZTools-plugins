@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import { useZtoolsAi } from './useZtoolsAi'
 
 const EXPLAIN_SYSTEM = `你是正则表达式老师。请用中文大白话解释用户给出的正则，要求：
@@ -27,6 +27,11 @@ export function useAiRegex(
 
   let explainAbort: (() => void) | null = null
   let explainTimer: ReturnType<typeof setTimeout> | null = null
+
+  onUnmounted(() => {
+    if (explainTimer) clearTimeout(explainTimer)
+    explainAbort?.()
+  })
 
   async function explainPattern(manual = false) {
     const p = pattern().trim()
@@ -115,7 +120,8 @@ export function useAiRegex(
         { role: 'user', content: req }
       ])
 
-      const text = raw.replace(/```[a-z]*\n([\s\S]*?)\n```/gi, '$1').trim()
+      const match = /```[a-z]*\n([\s\S]*?)\n```/i.exec(raw)
+      const text = (match ? match[1] : raw).trim()
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
       const newPattern = lines[0]?.replace(/^\/|\/$/g, '') ?? ''
       const newFlags = (lines[1] ?? '').replace(/[^gimsuy]/gi, '')

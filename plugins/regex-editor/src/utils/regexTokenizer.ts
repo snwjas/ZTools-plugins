@@ -185,13 +185,20 @@ function tokenizeInternal(pattern: string, start: number, end: number): { tokens
       const header = parseGroupHeader(pattern, i)
       let depth = 1
       let j = header.contentStart
+      let inCharClass = false
       while (j < end && depth > 0) {
         if (pattern[j] === '\\') {
           j += 2
           continue
         }
-        if (pattern[j] === '(') depth++
-        if (pattern[j] === ')') depth--
+        if (pattern[j] === '[' && !inCharClass) {
+          inCharClass = true
+        } else if (pattern[j] === ']' && inCharClass) {
+          inCharClass = false
+        } else if (!inCharClass) {
+          if (pattern[j] === '(') depth++
+          if (pattern[j] === ')') depth--
+        }
         if (depth > 0) j++
       }
       const groupEnd = depth === 0 ? j + 1 : end

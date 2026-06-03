@@ -125,7 +125,19 @@ export function useRegexEditor() {
   async function copyPattern() {
     const full = `/${pattern.value}/${flags.value}`
     try {
-      await navigator.clipboard.writeText(full)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(full)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = full
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        const success = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        if (!success) throw new Error('Copy command failed')
+      }
       window.ztools?.showNotification?.('已复制到剪贴板')
     } catch {
       window.ztools?.showNotification?.('复制失败')

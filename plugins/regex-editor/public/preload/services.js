@@ -9,9 +9,16 @@ window.services = {
   },
   // 文本写入到下载目录
   writeTextFile(text) {
-    const filePath = path.join(window.ztools.getPath('downloads'), Date.now().toString() + '.txt')
-    fs.writeFileSync(filePath, text, { encoding: 'utf-8' })
-    return filePath
+    try {
+      const downloadsPath = window.ztools ? window.ztools.getPath('downloads') : ''
+      if (!downloadsPath) throw new Error('ZTools API not available')
+      const filePath = path.join(downloadsPath, Date.now().toString() + '.txt')
+      fs.writeFileSync(filePath, text, { encoding: 'utf-8' })
+      return filePath
+    } catch (err) {
+      console.error('[regex-editor] writeTextFile failed:', err)
+      return undefined
+    }
   },
   // 图片写入到下载目录
   writeImageFile(base64Url) {
