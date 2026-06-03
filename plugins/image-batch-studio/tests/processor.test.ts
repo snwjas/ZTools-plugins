@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -70,6 +70,10 @@ async function makePdf(filePath: string, text: string) {
 }
 
 describe("offline processing engine", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("converts, resizes, crops, adds border, and rounds corners for HEIF inputs", async () => {
     const dir = await makeTempDir();
     const input = path.join(dir, "source.heif");
@@ -322,6 +326,23 @@ describe("offline processing engine", () => {
     const metadata = await sharp(result.outputPath).metadata();
     expect(metadata.width).toBe(48);
     expect(metadata.height).toBe(36);
+  });
+
+  it("uses atomic create writes when overwrite is disabled", async () => {
+    const dir = await makeTempDir();
+    const input = path.join(dir, "atomic.png");
+    const outputDir = path.join(dir, "out");
+    await makeImage(input, 24, 18, "#446a9d");
+    const writeFile = vi.spyOn(fs, "writeFile");
+
+    const [result] = await processImages([input], {
+      output: { directory: outputDir, namingPattern: "{name}.{ext}", overwrite: false },
+      format: { type: "png" }
+    });
+
+    expect(result.ok).toBe(true);
+    const outputWrite = writeFile.mock.calls.find((call) => String(call[0]) === result.outputPath);
+    expect(outputWrite?.[2]).toMatchObject({ flag: "wx" });
   });
 
   it("applies relative crop geometry per image in mixed-size batches", async () => {

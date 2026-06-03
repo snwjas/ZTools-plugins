@@ -125,6 +125,7 @@ describe("file discovery", () => {
     const files = await discoverFiles([dir], { maxFiles: 2 });
 
     expect(files).toHaveLength(2);
+    expect(files.truncated).toBe(true);
   });
 
   it("stops discovery at the configured directory depth", async () => {
@@ -138,5 +139,18 @@ describe("file discovery", () => {
     const files = await discoverFiles([dir], { maxDepth: 1 });
 
     expect(files.map((file) => path.basename(file.path))).toEqual(["visible.png"]);
+    expect(files.truncated).toBe(true);
+  });
+
+  it("stops discovery at the configured visited entry limit even when files are unsupported", async () => {
+    const dir = await makeTempDir();
+    for (let index = 0; index < 5; index += 1) {
+      await fs.writeFile(path.join(dir, `note-${index}.txt`), "skip");
+    }
+
+    const files = await discoverFiles([dir], { maxVisitedEntries: 3 });
+
+    expect(files).toHaveLength(0);
+    expect(files.truncated).toBe(true);
   });
 });

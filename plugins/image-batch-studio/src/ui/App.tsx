@@ -216,6 +216,9 @@ export function App() {
       for (const file of nextFiles) byPath.set(file.path, file);
       return Array.from(byPath.values());
     });
+    if ((nextFiles as SourceFile[] & { truncated?: boolean }).truncated) {
+      notify("文件夹内容较多，已按上限导入部分文件");
+    }
   }
 
   async function chooseFiles() {

@@ -8,18 +8,25 @@ const pdfExtensions = new Set([".pdf"]);
 const excludedDirectories = new Set([".git", "node_modules", ".DS_Store"]);
 const defaultMaxFiles = 1000;
 const defaultMaxDepth = 12;
+const defaultMaxVisitedEntries = 5000;
 
 export interface DiscoveryLimits {
   maxFiles?: number;
   maxDepth?: number;
+  maxVisitedEntries?: number;
 }
 
+export type DiscoveredFiles = SourceFile[] & { truncated?: boolean };
+
 interface DiscoveryState {
-  discovered: SourceFile[];
+  discovered: DiscoveredFiles;
   seen: Set<string>;
   visitedDirectories: Set<string>;
   maxFiles: number;
   maxDepth: number;
+  maxVisitedEntries: number;
+  visitedEntries: number;
+  truncated: boolean;
 }
 
 export function isImagePath(filePath: string): boolean {
@@ -30,26 +37,42 @@ export function isPdfPath(filePath: string): boolean {
   return pdfExtensions.has(path.extname(filePath).toLowerCase());
 }
 
-export async function discoverFiles(paths: string[], limits: DiscoveryLimits = {}): Promise<SourceFile[]> {
+export async function discoverFiles(paths: string[], limits: DiscoveryLimits = {}): Promise<DiscoveredFiles> {
   const state: DiscoveryState = {
-    discovered: [],
+    discovered: [] as DiscoveredFiles,
     seen: new Set<string>(),
     visitedDirectories: new Set<string>(),
     maxFiles: Math.max(1, Math.round(limits.maxFiles ?? defaultMaxFiles)),
-    maxDepth: Math.max(0, Math.round(limits.maxDepth ?? defaultMaxDepth))
+    maxDepth: Math.max(0, Math.round(limits.maxDepth ?? defaultMaxDepth)),
+    maxVisitedEntries: Math.max(1, Math.round(limits.maxVisitedEntries ?? defaultMaxVisitedEntries)),
+    visitedEntries: 0,
+    truncated: false
   };
 
   for (const itemPath of paths) {
-    if (state.discovered.length >= state.maxFiles) break;
+    if (state.discovered.length >= state.maxFiles || state.visitedEntries >= state.maxVisitedEntries) {
+      state.truncated = true;
+      break;
+    }
     const resolved = path.resolve(itemPath);
     await walk(resolved, state, 0);
   }
 
+  if (state.truncated) {
+    Object.defineProperty(state.discovered, "truncated", {
+      value: true,
+      enumerable: false
+    });
+  }
   return state.discovered;
 }
 
 async function walk(targetPath: string, state: DiscoveryState, depth: number): Promise<void> {
-  if (state.discovered.length >= state.maxFiles) return;
+  if (state.discovered.length >= state.maxFiles || state.visitedEntries >= state.maxVisitedEntries) {
+    state.truncated = true;
+    return;
+  }
+  state.visitedEntries += 1;
   const linkStat = await fs.lstat(targetPath).catch(() => null);
   if (!linkStat) return;
 
@@ -58,13 +81,19 @@ async function walk(targetPath: string, state: DiscoveryState, depth: number): P
   if (!stat) return;
 
   if (stat.isDirectory()) {
-    if (depth > state.maxDepth) return;
+    if (depth > state.maxDepth) {
+      state.truncated = true;
+      return;
+    }
     if (state.visitedDirectories.has(realPath)) return;
     if (excludedDirectories.has(path.basename(targetPath))) return;
     state.visitedDirectories.add(realPath);
     const children = await fs.readdir(targetPath).catch(() => [] as string[]);
     for (const child of children) {
-      if (state.discovered.length >= state.maxFiles) break;
+      if (state.discovered.length >= state.maxFiles || state.visitedEntries >= state.maxVisitedEntries) {
+        state.truncated = true;
+        break;
+      }
       await walk(path.join(targetPath, child), state, depth + 1);
     }
     return;
@@ -77,6 +106,9 @@ async function walk(targetPath: string, state: DiscoveryState, depth: number): P
     const file = await inspectFile(targetPath);
     state.seen.add(realPath);
     state.discovered.push(file);
+    if (state.discovered.length >= state.maxFiles) {
+      state.truncated = true;
+    }
   } catch {
     return;
   }

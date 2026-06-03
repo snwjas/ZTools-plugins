@@ -4,7 +4,6 @@ import sharp, { type Sharp } from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { GIFEncoder, applyPalette, quantize } from "gifenc";
 import type {
-  CropBox,
   GifOptions,
   ImageFormat,
   ImageJobSettings,
@@ -12,13 +11,11 @@ import type {
   ProcessResult,
   WatermarkPosition
 } from "../shared/types";
-import { clampCropToSize, cropFromRelative } from "../shared/crop-ratio";
 import { buildOutputPath, normalizeExtension } from "./paths";
+import { assertSafeProcessPlan, resolveCropBox } from "./process-plan";
 import {
   assertSafeGifRequest,
   assertSafePdfBatch,
-  assertSafeProcessOutput,
-  assertSafeProcessSource,
   estimateRgbaBytes,
   maxMergeDimension,
   maxMergeGap,
@@ -36,6 +33,21 @@ function isSupportedImage(filePath: string): boolean {
 
 async function ensureDirectory(directory: string) {
   await fs.mkdir(directory, { recursive: true });
+}
+
+function isErrorWithCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === code;
+}
+
+async function writeOutputFile(filePath: string, outputBuffer: Buffer, overwrite?: boolean) {
+  try {
+    await fs.writeFile(filePath, outputBuffer, { flag: overwrite ? "w" : "wx" });
+  } catch (error) {
+    if (isErrorWithCode(error, "EEXIST")) {
+      throw new Error(`输出文件已存在：${filePath}`);
+    }
+    throw error;
+  }
 }
 
 function clampInteger(value: number, min: number, max: number): number {
@@ -102,108 +114,6 @@ function formatFromPath(filePath: string): ImageFormat {
 
 function outputFormat(settings: ImageJobSettings, inputPath: string): ImageFormat {
   return settings.format?.type ?? formatFromPath(inputPath);
-}
-
-interface Dimensions {
-  width: number;
-  height: number;
-}
-
-function dimensionsFromMetadata(width: number | undefined, height: number | undefined): Dimensions | undefined {
-  if (!width || !height) return undefined;
-  return { width, height };
-}
-
-function normalizedQuarterTurn(value: number | undefined): number {
-  const degrees = Number.isFinite(value) ? Math.round(value as number) : 0;
-  return ((degrees % 360) + 360) % 360;
-}
-
-function dimensionsAfterRotate(dimensions: Dimensions, rotate: number | undefined): Dimensions {
-  const degrees = normalizedQuarterTurn(rotate);
-  return degrees === 90 || degrees === 270
-    ? { width: dimensions.height, height: dimensions.width }
-    : dimensions;
-}
-
-function scaledDimensions(dimensions: Dimensions, scale: number): Dimensions {
-  return {
-    width: Math.max(1, Math.round(dimensions.width * scale)),
-    height: Math.max(1, Math.round(dimensions.height * scale))
-  };
-}
-
-function dimensionsAfterResize(dimensions: Dimensions, settings: ImageJobSettings): Dimensions {
-  const resize = settings.resize;
-  if (!resize?.width && !resize?.height) return dimensions;
-
-  const width = resize.width;
-  const height = resize.height;
-  const withoutEnlargement = resize.withoutEnlargement ?? true;
-
-  if (resize.mode === "exact") {
-    return {
-      width: Math.max(1, Math.round(width ?? dimensions.width)),
-      height: Math.max(1, Math.round(height ?? dimensions.height))
-    };
-  }
-
-  if (resize.mode === "long-edge" || resize.mode === "short-edge") {
-    const target = width ?? height;
-    if (!target) return dimensions;
-    const sourceEdge =
-      resize.mode === "long-edge"
-        ? Math.max(dimensions.width, dimensions.height)
-        : Math.min(dimensions.width, dimensions.height);
-    const scale = withoutEnlargement ? Math.min(1, target / sourceEdge) : target / sourceEdge;
-    return scaledDimensions(dimensions, scale);
-  }
-
-  if ((resize.mode === "cover" || resize.mode === "contain") && width && height) {
-    return { width, height };
-  }
-
-  const widthScale = width ? width / dimensions.width : undefined;
-  const heightScale = height ? height / dimensions.height : undefined;
-  let scale = Math.min(widthScale ?? Number.POSITIVE_INFINITY, heightScale ?? Number.POSITIVE_INFINITY);
-  if (scale === Number.POSITIVE_INFINITY) return dimensions;
-  if (withoutEnlargement) scale = Math.min(1, scale);
-  return scaledDimensions(dimensions, scale);
-}
-
-function resolveCropBox(settings: ImageJobSettings, size: { width?: number; height?: number }): CropBox | undefined {
-  if (settings.cropRelative) {
-    return cropFromRelative(settings.cropRelative, size);
-  }
-  if (settings.crop) {
-    return clampCropToSize(settings.crop, size);
-  }
-  return undefined;
-}
-
-function estimateProcessDimensions(settings: ImageJobSettings, source: Dimensions): Dimensions {
-  let dimensions = dimensionsAfterRotate(source, settings.rotate);
-  dimensions = dimensionsAfterResize(dimensions, settings);
-  const crop = resolveCropBox(settings, dimensions);
-  if (crop) {
-    dimensions = { width: crop.width, height: crop.height };
-  }
-  if (settings.border?.enabled && settings.border.width > 0) {
-    const borderWidth = Math.max(0, Math.round(settings.border.width));
-    dimensions = {
-      width: dimensions.width + borderWidth * 2,
-      height: dimensions.height + borderWidth * 2
-    };
-  }
-  return dimensions;
-}
-
-function assertSafeProcessPlan(settings: ImageJobSettings, width: number | undefined, height: number | undefined): void {
-  assertSafeProcessSource(width, height);
-  const source = dimensionsFromMetadata(width, height);
-  if (!source) return;
-  const estimated = estimateProcessDimensions(settings, source);
-  assertSafeProcessOutput(estimated.width, estimated.height);
 }
 
 function applyResize(image: Sharp, settings: ImageJobSettings, width?: number, height?: number): Sharp {
@@ -322,7 +232,10 @@ async function applyWatermark(image: Sharp, settings: ImageJobSettings): Promise
 
   if (watermark.kind === "image" && watermark.imagePath) {
     const maxOverlayWidth = Math.max(24, Math.round(width * 0.35));
-    const overlayBase = await sharp(watermark.imagePath)
+    const overlayBase = await sharp(watermark.imagePath, {
+      animated: false,
+      limitInputPixels: maxProcessSourcePixels
+    })
       .resize({ width: maxOverlayWidth, withoutEnlargement: true })
       .toColorspace("srgb")
       .ensureAlpha()
@@ -499,10 +412,7 @@ async function processOne(
       overwrite: settings.output.overwrite
     });
 
-    if (!settings.output.overwrite) {
-      await ensureUniqueForFilesystem(outputPath);
-    }
-    await fs.writeFile(outputPath, outputBuffer);
+    await writeOutputFile(outputPath, outputBuffer, settings.output.overwrite);
     const [inputStat, outputStat] = await Promise.all([fs.stat(inputPath), fs.stat(outputPath)]);
     return {
       inputPath,
@@ -521,15 +431,6 @@ async function processOne(
       error: error instanceof Error ? error.message : String(error)
     };
   }
-}
-
-async function ensureUniqueForFilesystem(filePath: string) {
-  try {
-    await fs.access(filePath);
-  } catch {
-    return;
-  }
-  throw new Error(`Output file already exists: ${filePath}`);
 }
 
 export async function processImages(
@@ -686,7 +587,10 @@ export async function createGif(
   const encoder = GIFEncoder();
 
   for (const [index, inputPath] of inputPaths.entries()) {
-    const rgba = await sharp(inputPath)
+    const rgba = await sharp(inputPath, {
+      animated: false,
+      limitInputPixels: maxProcessSourcePixels
+    })
       .rotate()
       .resize({
         width,

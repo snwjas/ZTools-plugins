@@ -97,4 +97,48 @@ describe("settings persistence", () => {
       height: 24
     });
   });
+
+  it("normalizes invalid persisted values back to safe defaults", () => {
+    const merged = mergeImageJobSettings(defaults, {
+      output: {
+        directory: 12,
+        namingPattern: ["bad"],
+        overwrite: "yes"
+      },
+      format: {
+        type: "svg",
+        quality: Number.POSITIVE_INFINITY,
+        keepMetadata: "true"
+      },
+      resize: {
+        mode: "unsafe",
+        width: -20
+      },
+      watermark: {
+        kind: "markup",
+        position: "javascript",
+        opacity: "0.5",
+        fontSize: "huge",
+        color: "url(#bad)",
+        margin: Number.NaN,
+        rotation: "rotate(0)"
+      },
+      rotate: "90deg",
+      flip: "diagonal",
+      crop: {
+        left: "x",
+        top: 0,
+        width: 10,
+        height: 10
+      }
+    });
+
+    expect(merged.output).toEqual(defaults.output);
+    expect(merged.format).toEqual(defaults.format);
+    expect(merged.resize).toEqual(defaults.resize);
+    expect(merged.watermark).toEqual(defaults.watermark);
+    expect(merged.rotate).toBe(defaults.rotate);
+    expect(merged.flip).toBeUndefined();
+    expect(merged.crop).toBeUndefined();
+  });
 });
