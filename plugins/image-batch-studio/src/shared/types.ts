@@ -127,4 +127,5 @@ export interface OutputPathInput {
   width?: number;
   height?: number;
   existingPaths?: Set<string>;
+  overwrite?: boolean;
 }
