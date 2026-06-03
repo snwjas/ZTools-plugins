@@ -142,6 +142,46 @@ describe("offline processing engine", () => {
     expect(metadata.height).toBe(80);
   });
 
+  it("rotates text watermarks around their anchor point", async () => {
+    const dir = await makeTempDir();
+    const input = path.join(dir, "watermark-anchor.png");
+    const outputDir = path.join(dir, "out");
+    await makeImage(input, 160, 120, "#000000");
+
+    const [result] = await processImages([input], {
+      output: { directory: outputDir, namingPattern: "{name}-anchored.{ext}", overwrite: false },
+      format: { type: "png" },
+      watermark: {
+        enabled: true,
+        kind: "text",
+        text: "Z",
+        position: "northwest",
+        opacity: 1,
+        fontSize: 48,
+        color: "#ffffff",
+        margin: 8,
+        rotation: 45
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    const leftAnchorPixels = await sharp(result.outputPath)
+      .ensureAlpha()
+      .extract({ left: 0, top: 0, width: 32, height: 70 })
+      .raw()
+      .toBuffer()
+      .then((pixels) => {
+        let brightPixels = 0;
+        for (let index = 0; index < pixels.length; index += 4) {
+          if (pixels[index] > 180 && pixels[index + 1] > 180 && pixels[index + 2] > 180) {
+            brightPixels += 1;
+          }
+        }
+        return brightPixels;
+      });
+    expect(leftAnchorPixels).toBeGreaterThan(100);
+  });
+
   it("processes HEIF and HEIC inputs through image modules", async () => {
     const dir = await makeTempDir();
     const heifInput = path.join(dir, "source.heif");

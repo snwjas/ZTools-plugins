@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { buildOutputPath, normalizeExtension } from "../src/preload/paths";
 
@@ -21,5 +24,23 @@ describe("output path helpers", () => {
     });
 
     expect(output).toBe(path.join("/tmp/out", "Product Hero-3-1200x800-1.webp"));
+  });
+
+  it("skips existing disk files when overwrite is disabled", async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "image-batch-paths-"));
+    const existingPath = path.join(dir, "sample.png");
+    await fsp.writeFile(existingPath, "existing");
+
+    const output = buildOutputPath({
+      inputPath: path.join(dir, "sample.png"),
+      outputDirectory: dir,
+      targetFormat: "png",
+      namingPattern: "{name}.{ext}",
+      index: 1,
+      overwrite: false
+    });
+
+    expect(fs.existsSync(existingPath)).toBe(true);
+    expect(output).toBe(path.join(dir, "sample-1.png"));
   });
 });

@@ -47,7 +47,10 @@ async function walk(targetPath: string, visitedDirectories: Set<string>): Promis
     if (excludedDirectories.has(path.basename(targetPath))) return [];
     visitedDirectories.add(realPath);
     const children = await fs.readdir(targetPath).catch(() => [] as string[]);
-    const results = await Promise.all(children.map((child) => walk(path.join(targetPath, child), visitedDirectories)));
+    const results: SourceFile[][] = [];
+    for (const child of children) {
+      results.push(await walk(path.join(targetPath, child), visitedDirectories));
+    }
     return results.flat();
   }
 

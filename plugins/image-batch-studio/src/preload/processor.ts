@@ -240,10 +240,12 @@ async function applyWatermark(image: Sharp, settings: ImageJobSettings): Promise
 
   const fontSize = Math.max(8, watermark.fontSize);
   const text = escapeXml(watermark.text || "Watermark");
+  const x = positionX(watermark.position, width, margin);
+  const y = positionY(watermark.position, height, margin);
   const overlay = Buffer.from(`
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <g opacity="${opacity}" transform="rotate(${watermark.rotation} ${width / 2} ${height / 2})">
-        <text x="${positionX(watermark.position, width, margin)}" y="${positionY(watermark.position, height, margin)}"
+      <g opacity="${opacity}" transform="rotate(${watermark.rotation} ${x} ${y})">
+        <text x="${x}" y="${y}"
           text-anchor="${textAnchor(watermark.position)}" dominant-baseline="${dominantBaseline(watermark.position)}"
           fill="${watermark.color}" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif"
           font-size="${fontSize}" font-weight="700">${text}</text>
@@ -372,7 +374,8 @@ async function processOne(
       index,
       width: outMetadata.width,
       height: outMetadata.height,
-      existingPaths
+      existingPaths,
+      overwrite: settings.output.overwrite
     });
 
     if (!settings.output.overwrite) {
@@ -449,6 +452,15 @@ export async function mergeImages(
   const prepared: Array<{ inputPath: string; buffer: Buffer; width: number; height: number; channels: 1 | 2 | 3 | 4 }> = [];
   let preparedBytes = 0;
   for (const inputPath of inputPaths) {
+    const metadata = await sharp(inputPath, {
+      animated: false,
+      limitInputPixels: maxMergeSourcePixels
+    }).metadata();
+    const estimatedBytes = (metadata.width ?? 0) * (metadata.height ?? 0) * 4;
+    if (preparedBytes + estimatedBytes > maxMergePreparedBytes) {
+      throw new Error("拼图输入图片过大，请减少图片数量、先压缩图片或改用更小尺寸");
+    }
+
     const image = await sharp(inputPath, {
       animated: false,
       limitInputPixels: maxMergeSourcePixels
@@ -458,7 +470,7 @@ export async function mergeImages(
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
-    preparedBytes += image.data.byteLength;
+    preparedBytes += estimatedBytes || image.data.byteLength;
     if (preparedBytes > maxMergePreparedBytes) {
       throw new Error("拼图输入图片过大，请减少图片数量、先压缩图片或改用更小尺寸");
     }

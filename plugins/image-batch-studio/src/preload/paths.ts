@@ -31,7 +31,9 @@ export function buildOutputPath(input: OutputPathInput): string {
 
   const existingPaths = input.existingPaths ?? new Set<string>();
   const candidate = path.join(input.outputDirectory, filename);
-  if (!existingPaths.has(candidate)) {
+  const collides = (candidatePath: string) => existingPaths.has(candidatePath) || (!input.overwrite && fs.existsSync(candidatePath));
+
+  if (!collides(candidate)) {
     existingPaths.add(candidate);
     return candidate;
   }
@@ -40,7 +42,7 @@ export function buildOutputPath(input: OutputPathInput): string {
   const ext = path.extname(filename);
   for (let suffix = 1; suffix < 10000; suffix += 1) {
     const next = path.join(input.outputDirectory, `${name}-${suffix}${ext}`);
-    if (!existingPaths.has(next)) {
+    if (!collides(next)) {
       existingPaths.add(next);
       return next;
     }
