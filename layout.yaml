@@ -9,8 +9,10 @@ layout:
     plugins:
       - ztools-developer-plugin
       - zosenlink-tunnel
+      - termdock
       - clipboard
       - ai-helper
+      - shortcut-capture
   - type: navigation
     title: 开始探索
     categories:
