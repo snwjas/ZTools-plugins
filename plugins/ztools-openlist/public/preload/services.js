@@ -147,23 +147,77 @@ async function downloadUrlToBuffer(url, token, knownSize = 0) {
     headers: authHeaders(token, {
       'Accept-Encoding': 'identity'
     }),
-    responseType: 'arraybuffer',
+    responseType: 'stream',
     decompress: false,
     validateStatus: () => true,
     maxBodyLength: Infinity,
-    maxContentLength: COPY_BUFFER_LIMIT_BYTES
+    maxContentLength: Infinity
   })
 
   if (res.status < 200 || res.status >= 300) {
+    destroyReadableStream(res.data)
     throw new Error(`HTTP ${res.status}`)
   }
 
   const contentLength = Number(getResponseHeader(res.headers, 'content-length')) || 0
   if (contentLength > COPY_BUFFER_LIMIT_BYTES) {
+    destroyReadableStream(res.data)
     throw new Error(`文件超过复制兜底限制：${Math.round(COPY_BUFFER_LIMIT_BYTES / 1024 / 1024)}MB`)
   }
 
-  return Buffer.from(res.data)
+  return readStreamToBuffer(res.data, COPY_BUFFER_LIMIT_BYTES)
+}
+
+function destroyReadableStream(stream) {
+  if (!stream) return
+  if (typeof stream.destroy === 'function') {
+    stream.destroy()
+  } else if (typeof stream.cancel === 'function') {
+    stream.cancel().catch(() => {})
+  }
+}
+
+async function readStreamToBuffer(stream, limit) {
+  const chunks = []
+  let loaded = 0
+
+  if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
+    for await (const chunk of stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      loaded += buffer.length
+      if (loaded > limit) {
+        destroyReadableStream(stream)
+        throw new Error(`文件超过复制兜底限制：${Math.round(limit / 1024 / 1024)}MB`)
+      }
+      chunks.push(buffer)
+    }
+
+    return Buffer.concat(chunks, loaded)
+  }
+
+  if (stream && typeof stream.getReader === 'function') {
+    const reader = stream.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const buffer = Buffer.from(value)
+        loaded += buffer.length
+        if (loaded > limit) {
+          await reader.cancel().catch(() => {})
+          throw new Error(`文件超过复制兜底限制：${Math.round(limit / 1024 / 1024)}MB`)
+        }
+        chunks.push(buffer)
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    return Buffer.concat(chunks, loaded)
+  }
+
+  throw new Error('下载响应不是可流式读取的数据，已拒绝使用 Buffer 保存大文件')
 }
 
 async function writeNodeStreamToFile(stream, savePath, total, onProgress) {
@@ -172,14 +226,27 @@ async function writeNodeStreamToFile(stream, savePath, total, onProgress) {
 
   await new Promise((resolve, reject) => {
     const fileStream = fs.createWriteStream(savePath)
+    let settled = false
+
+    const fail = (err) => {
+      if (settled) return
+      settled = true
+      destroyReadableStream(stream)
+      fileStream.destroy()
+      reject(err)
+    }
 
     stream.on('data', (chunk) => {
       loaded += chunk.length
       emitDownloadProgress(onProgress, loaded, total, progressState)
     })
-    stream.once('error', reject)
-    fileStream.once('error', reject)
-    fileStream.once('finish', resolve)
+    stream.once('error', fail)
+    fileStream.once('error', fail)
+    fileStream.once('finish', () => {
+      if (settled) return
+      settled = true
+      resolve()
+    })
     stream.pipe(fileStream)
   })
 
@@ -262,13 +329,25 @@ function authHeaders(token, extra = {}) {
   }
 }
 
-async function uploadOpenListBuffer(baseUrl, token, remoteDir, fileName, fileBuffer, onProgress) {
+async function uploadOpenListBuffer(baseUrl, token, remoteDir, fileName, data, dataLength, onProgress) {
   const remotePath = path.posix.join(remoteDir || '/', fileName)
+  const explicitLength = Number(dataLength)
+  const contentLength =
+    Number.isFinite(explicitLength) && explicitLength >= 0
+      ? explicitLength
+      : Buffer.isBuffer(data)
+        ? data.length
+        : null
 
-  const res = await axios.put(`${normalizeBaseUrl(baseUrl)}/api/fs/put`, fileBuffer, {
+  if (contentLength === null) {
+    throw new Error('上传流缺少有效的 Content-Length')
+  }
+
+  const res = await axios.put(`${normalizeBaseUrl(baseUrl)}/api/fs/put`, data, {
+    adapter: 'http',
     headers: authHeaders(token, {
       'Content-Type': 'application/octet-stream',
-      'Content-Length': String(fileBuffer.length),
+      'Content-Length': String(contentLength),
       'File-Path': encodeURIComponent(remotePath),
       'As-Task': 'false'
     }),
@@ -278,7 +357,7 @@ async function uploadOpenListBuffer(baseUrl, token, remoteDir, fileName, fileBuf
     onUploadProgress(progress) {
       if (typeof onProgress !== 'function') return
       const loaded = progress.loaded || 0
-      const total = progress.total || fileBuffer.length
+      const total = progress.total || contentLength
       onProgress({
         loaded,
         total,
@@ -576,7 +655,7 @@ async function collectSelectedOpenListDownloadEntries(baseUrl, token, srcDir, na
 async function copyOpenListFileByDownload(baseUrl, token, srcDir, dstDir, sourceName, targetName) {
   const sourcePath = path.posix.join(srcDir, sourceName)
   const fileBuffer = await downloadOpenListFileBuffer(baseUrl, token, sourcePath)
-  return uploadOpenListBuffer(baseUrl, token, dstDir, targetName, fileBuffer)
+  return uploadOpenListBuffer(baseUrl, token, dstDir, targetName, fileBuffer, fileBuffer.length)
 }
 
 async function copyOpenListDirByList(baseUrl, token, sourcePath, targetParentDir, targetName) {
@@ -894,18 +973,22 @@ window.services = {
 
   async uploadOpenListFile(baseUrl, token, remoteDir, localFilePath, onProgress) {
     const fileName = path.basename(localFilePath)
-    const fileBuffer = fs.readFileSync(localFilePath)
+    const stats = fs.statSync(localFilePath)
+    const fileStream = fs.createReadStream(localFilePath)
 
-    return uploadOpenListBuffer(baseUrl, token, remoteDir, fileName, fileBuffer, onProgress)
+    return uploadOpenListBuffer(baseUrl, token, remoteDir, fileName, fileStream, stats.size, onProgress)
   },
 
   async uploadOpenListFileContent(baseUrl, token, remoteDir, fileName, arrayBuffer, onProgress) {
+    const fileBuffer = Buffer.from(arrayBuffer)
+
     return uploadOpenListBuffer(
       baseUrl,
       token,
       remoteDir,
       fileName,
-      Buffer.from(arrayBuffer),
+      fileBuffer,
+      fileBuffer.length,
       onProgress
     )
   }

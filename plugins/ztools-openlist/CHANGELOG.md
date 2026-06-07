@@ -1,7 +1,7 @@
 # Changelog
 
-## v1.0.0
+## v1.0.1
 
-- 初始版本发布
-- 支持在 ZTools 中浏览 OpenList 文件
-- 支持 OpenList 文件上传、下载和管理
+- 发布版本v1.0.1
+- 根据gemini-code-assist[bot] 的修改意见进行了修改
+- 去除多余文件
