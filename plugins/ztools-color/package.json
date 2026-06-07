@@ -1,0 +1,6 @@
+{
+    "type": "commonjs",
+    "dependencies": {
+        "electron-color-picker": "^0.2.0"
+      }
+  }
