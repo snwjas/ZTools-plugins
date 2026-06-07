@@ -3,7 +3,7 @@ const http = require('node:http')
 const https = require('node:https')
 const path = require('node:path')
 const zlib = require('node:zlib')
-const { ipcRenderer, net } = require('electron')
+const { clipboard, ipcRenderer, net } = require('electron')
 
 const SOURCE_COOKIE_STORE_KEY = 'deepread.sourceCookies.v1'
 const sourceCookieStore = loadSourceCookieStore()
@@ -142,11 +142,27 @@ function inflateResponse(buffer, encoding) {
   return buffer
 }
 
+function isGoogleHost(hostname) {
+  const host = String(hostname || '')
+    .toLowerCase()
+    .replace(/\.$/, '')
+  return host === 'google.com' || host.endsWith('.google.com')
+}
+
 function isBlockedRedirect(fromUrl, toUrl) {
   try {
     const fromHost = new URL(fromUrl).hostname
     const toHost = new URL(toUrl, fromUrl).hostname
-    return fromHost !== toHost && toHost.endsWith('google.com')
+    return fromHost !== toHost && isGoogleHost(toHost)
+  } catch (error) {
+    return false
+  }
+}
+
+function isHttpUrl(target) {
+  try {
+    const protocol = new URL(target).protocol
+    return protocol === 'http:' || protocol === 'https:'
   } catch (error) {
     return false
   }
@@ -257,8 +273,9 @@ function mergeSetCookies(cookie, setCookies) {
     const key = pair.slice(0, index).trim()
     const value = pair.slice(index + 1).trim()
     const expires = /expires\s*=\s*([^;]+)/i.exec(setCookie)?.[1] || ''
-    const maxAge = /max-age\s*=\s*(-?\d+)/i.exec(setCookie)?.[1] || ''
-    if (!value || maxAge === '0' || /^(thu,\s*)?01 jan 1970/i.test(expires)) {
+    const maxAge = /max-age\s*=\s*(-?\d+)/i.exec(setCookie)?.[1]
+    const expiredByMaxAge = maxAge !== undefined && Number(maxAge) <= 0
+    if (!value || expiredByMaxAge || /^(thu,\s*)?01 jan 1970/i.test(expires)) {
       delete merged[key]
     } else {
       merged[key] = value
@@ -299,10 +316,10 @@ function getResponseSetCookies(response) {
   return splitSetCookieHeader(response.headers?.get?.('set-cookie'))
 }
 
-function fetchText(request, redirectCount = 0) {
+async function fetchText(request, redirectCount = 0) {
   const target = typeof request === 'string' ? request : request?.url
-  if (!target) return Promise.reject(new Error('请求地址为空'))
-  if (net?.fetch) return fetchTextWithElectronNet(request)
+  if (!target) throw new Error('请求地址为空')
+  if (net?.fetch && !isHttpUrl(target)) return fetchTextWithElectronNet(request)
 
   const url = new URL(target)
   const transport = url.protocol === 'https:' ? https : http
@@ -348,6 +365,8 @@ function fetchText(request, redirectCount = 0) {
 
         const chunks = []
         response.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+        response.once('error', reject)
+        response.once('aborted', () => reject(new Error('连接被中止')))
         response.on('end', () => {
           if (statusCode >= 400) {
             reject(new Error(`请求失败：HTTP ${statusCode}`))
@@ -413,7 +432,7 @@ async function fetchTextWithElectronNet(request, redirectCount = 0) {
   try {
     const finalHost = new URL(finalUrl).hostname
     const targetHost = new URL(target).hostname
-    if (targetHost !== finalHost && finalHost.endsWith('google.com')) {
+    if (targetHost !== finalHost && isGoogleHost(finalHost)) {
       throw new Error('请求被站点跳转到 Google，可能被反爬拦截')
     }
   } catch (error) {
@@ -428,10 +447,10 @@ function toDataUrl(buffer, contentType) {
   return `data:${mime};base64,${buffer.toString('base64')}`
 }
 
-function fetchDataUrl(request, redirectCount = 0) {
+async function fetchDataUrl(request, redirectCount = 0) {
   const target = typeof request === 'string' ? request : request?.url
-  if (!target) return Promise.reject(new Error('请求地址为空'))
-  if (net?.fetch) return fetchDataUrlWithElectronNet(request)
+  if (!target) throw new Error('请求地址为空')
+  if (net?.fetch && !isHttpUrl(target)) return fetchDataUrlWithElectronNet(request)
 
   const url = new URL(target)
   const transport = url.protocol === 'https:' ? https : http
@@ -477,6 +496,8 @@ function fetchDataUrl(request, redirectCount = 0) {
 
         const chunks = []
         response.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+        response.once('error', reject)
+        response.once('aborted', () => reject(new Error('连接被中止')))
         response.on('end', () => {
           if (statusCode >= 400) {
             reject(new Error(`请求失败：HTTP ${statusCode}`))
@@ -542,7 +563,7 @@ async function fetchDataUrlWithElectronNet(request, redirectCount = 0) {
   try {
     const finalHost = new URL(finalUrl).hostname
     const targetHost = new URL(target).hostname
-    if (targetHost !== finalHost && finalHost.endsWith('google.com')) {
+    if (targetHost !== finalHost && isGoogleHost(finalHost)) {
       throw new Error('请求被站点跳转到 Google，可能被反爬拦截')
     }
   } catch (error) {
@@ -560,7 +581,11 @@ window.services = {
   },
 
   readFile(filePath) {
-    return this.readTextFile(filePath).content
+    return window.services.readTextFile(filePath).content
+  },
+
+  readClipboardText() {
+    return clipboard.readText()
   },
 
   readTextFile(filePath) {
